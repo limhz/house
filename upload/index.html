@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>房源选择系统</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Tab导航 -->
+    <nav class="tab-nav">
+        <button class="tab-btn active" data-page="home">俯视图</button>
+        <button class="tab-btn" data-page="price">价格页</button>
+        <button class="tab-btn" data-page="expectation">期望值</button>
+    </nav>
+
+    <!-- 首页 -->
+    <div id="home-page" class="page active">
+        <div class="page-header">
+            <h1>小区俯视图</h1>
+        </div>
+        <div class="map-container">
+            <img src="image.png" alt="小区俯视图" id="map-image" class="map-image">
+            <canvas id="map-canvas" class="map-canvas"></canvas>
+            <div id="annotation-overlay" class="annotation-overlay" style="display: none;"></div>
+            <div class="map-controls">
+                <button id="toggle-annotation" class="btn-annotation">开启标注模式</button>
+                <button id="clear-annotations" class="btn-clear" style="display: none;">清除所有标注</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 价格页 -->
+    <div id="price-page" class="page">
+        <div class="page-header">
+            <h1>房源列表</h1>
+        </div>
+        <div class="filters-container">
+            <div class="filter-group">
+                <label>楼栋:</label>
+                <select id="filter-building">
+                    <option value="">全部</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>房型:</label>
+                <select id="filter-room-type">
+                    <option value="">全部</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>面积:</label>
+                <select id="filter-area">
+                    <option value="">全部</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>朝向:</label>
+                <div class="custom-multiselect" id="filter-orientation-wrapper">
+                    <div class="multiselect-display" id="filter-orientation-display">
+                        <span class="placeholder">请选择朝向</span>
+                    </div>
+                    <div class="multiselect-dropdown" id="filter-orientation-dropdown" style="display: none;">
+                        <div class="multiselect-options" id="filter-orientation-options"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="filter-group">
+                <label>价格（万元）:</label>
+                <input type="number" id="filter-price-min" placeholder="最低" step="0.01">
+                <span>-</span>
+                <input type="number" id="filter-price-max" placeholder="最高" step="0.01">
+            </div>
+            <div class="filter-group">
+                <label>楼层:</label>
+                <select id="filter-floor">
+                    <option value="">全部</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>售出情况:</label>
+                <select id="filter-sold-status">
+                    <option value="">全部</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>分数排序:</label>
+                <select id="filter-score-sort" title="请先设置期望值权重">
+                    <option value="">不排序</option>
+                    <option value="desc">从高到低</option>
+                    <option value="asc">从低到高</option>
+                </select>
+            </div>
+            <button class="btn-primary" id="btn-search">搜索</button>
+            <button class="btn-secondary" id="btn-calculate-score">计算分数</button>
+        </div>
+        <div class="houses-list" id="houses-list">
+            <!-- 房源列表将在这里动态加载 -->
+        </div>
+        <div class="pagination" id="pagination">
+            <!-- 分页控件将在这里动态生成 -->
+        </div>
+    </div>
+
+    <!-- 期望值页面 -->
+    <div id="expectation-page" class="page">
+        <div class="page-header">
+            <h1>设置期望值权重</h1>
+        </div>
+        <div class="expectation-container">
+            <div class="expectation-item">
+                <label>你觉得房子朝向的重要程度 (0-10，0=无所谓):</label>
+                <input type="range" min="0" max="10" value="5" id="weight-orientation" class="weight-slider">
+                <span class="weight-value" id="weight-orientation-value">5</span>
+            </div>
+            <div class="expectation-item full-width" id="orientation-sort-container" style="display: none;">
+                <label>朝向梯度表（拖动卡片调整梯度）:</label>
+                <div class="gradient-table">
+                    <div class="gradient-tier">
+                        <div class="tier-header">满意 (100分)</div>
+                        <div class="tier-content" id="orientation-tier-1" data-tier="1"></div>
+                    </div>
+                    <div class="gradient-tier">
+                        <div class="tier-header">比较满意 (60分)</div>
+                        <div class="tier-content" id="orientation-tier-2" data-tier="2"></div>
+                    </div>
+                    <div class="gradient-tier">
+                        <div class="tier-header">一般 (20分)</div>
+                        <div class="tier-content" id="orientation-tier-3" data-tier="3"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="expectation-item">
+                <label>你觉得房子价格的重要程度 (0-10，0=无所谓):</label>
+                <input type="range" min="0" max="10" value="5" id="weight-price" class="weight-slider">
+                <span class="weight-value" id="weight-price-value">5</span>
+            </div>
+            <div class="expectation-item">
+                <label>请输入你的心理预期总房价（万元）:</label>
+                <input type="number" id="expected-price" placeholder="例如：350" min="0" step="0.01" style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; width: 200px;">
+                <span id="price-reference" style="color: #999; font-size: 12px; margin-left: 10px;"></span>
+            </div>
+            <div class="expectation-item">
+                <label>你觉得房子噪音的重要程度 (0-10，0=无所谓):</label>
+                <input type="range" min="0" max="10" value="5" id="weight-noise" class="weight-slider">
+                <span class="weight-value" id="weight-noise-value">5</span>
+            </div>
+            <div class="expectation-item">
+                <label>你觉得房子景观的重要程度 (0-10，0=无所谓):</label>
+                <input type="range" min="0" max="10" value="5" id="weight-view" class="weight-slider">
+                <span class="weight-value" id="weight-view-value">5</span>
+            </div>
+            <div class="expectation-item full-width" id="view-sort-container" style="display: none;">
+                <label>景观梯度表（拖动卡片调整梯度，可添加房号到第一梯队）:</label>
+                <div class="gradient-table">
+                    <div class="gradient-tier">
+                        <div class="tier-header">满意 (100分)</div>
+                        <div class="tier-content" id="view-tier-1" data-tier="1">
+                            <div class="add-room-input">
+                                <input type="text" id="view-add-room" placeholder="输入房号（如：1C06）" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; width: 150px;">
+                                <button id="view-add-room-btn" style="padding: 4px 12px; background: #1890ff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin-left: 8px;">添加</button>
+                                <small style="display: block; color: #999; margin-top: 4px;">格式：楼栋+房号（如1C06）</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="gradient-tier">
+                        <div class="tier-header">比较满意 (60分)</div>
+                        <div class="tier-content" id="view-tier-2" data-tier="2"></div>
+                    </div>
+                    <div class="gradient-tier">
+                        <div class="tier-header">一般 (20分)</div>
+                        <div class="tier-content" id="view-tier-3" data-tier="3"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="expectation-item">
+                <label>你觉得房子楼层高度的重要程度 (0-10，0=无所谓):</label>
+                <input type="range" min="0" max="10" value="5" id="weight-floor" class="weight-slider">
+                <span class="weight-value" id="weight-floor-value">5</span>
+            </div>
+            <div class="expectation-item" id="floor-preference-container" style="display: none;">
+                <label>请选择你最中意的楼层（上下楼层会递减分数）:</label>
+                <input type="number" id="preferred-floor" placeholder="例如：20" min="1" max="38" step="1" style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; width: 150px;">
+                <span style="color: #999; font-size: 12px; margin-left: 10px;">（1-38层）</span>
+            </div>
+            <div class="expectation-item">
+                <label>你觉得房子房型的重要程度 (0-10，0=无所谓):</label>
+                <input type="range" min="0" max="10" value="5" id="weight-room-type" class="weight-slider">
+                <span class="weight-value" id="weight-room-type-value">5</span>
+            </div>
+            <div class="expectation-item">
+                <label>你觉得楼栋的重要程度 (0-10，0=无所谓):</label>
+                <input type="range" min="0" max="10" value="3" id="weight-building" class="weight-slider">
+                <span class="weight-value" id="weight-building-value">3</span>
+            </div>
+            <button class="btn-primary" id="btn-save-weights">保存权重</button>
+            
+            <div class="expectation-explanation">
+                <h4>说明</h4>
+                <p>噪音评级中，"好" 多为楼栋内侧朝园林户型，避开主干道和社区配套噪音；"中" 多靠近社区配套或侧对道路；"差" 多临近月亮湾大道、公交首末站等核心噪音源。</p>
+                <p>景观方面，西向部分户型可远眺港口海景，南向、东南向部分户型能直击小南山山景，楼栋中间户型多为楼景，受相邻楼栋遮挡。</p>
+                <p>1B、1F 部分两房房号未完全标注统一序号，结合户型分布规律补充了主流在售房源信息，实际以售楼处现场公示为准。</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 楼栋房源弹窗 -->
+    <div id="building-modal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close">&times;</span>
+            <h2 id="modal-building-name"></h2>
+            <div class="modal-houses-list" id="modal-houses-list">
+                <!-- 弹窗中的房源列表 -->
+            </div>
+        </div>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
+

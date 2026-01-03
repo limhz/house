@@ -1,0 +1,983 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    background-color: #f5f5f5;
+    color: #333;
+    overflow-x: hidden;
+}
+
+/* Tab导航 */
+.tab-nav {
+    display: flex;
+    background-color: #fff;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    padding: 0 30px; /* 加高1.5倍：从20px改为30px */
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.tab-btn {
+    padding: 22.5px 30px; /* 加高1.5倍：从15px改为22.5px */
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 16px;
+    color: #666;
+    border-bottom: 3px solid transparent;
+    transition: all 0.3s;
+}
+
+.tab-btn:hover {
+    color: #1890ff;
+    background-color: #f0f8ff;
+}
+
+.tab-btn.active {
+    color: #1890ff;
+    border-bottom-color: #1890ff;
+    font-weight: bold;
+}
+
+/* 页面容器 */
+.page {
+    display: none;
+    min-height: calc(100vh - 60px);
+    padding: 20px;
+}
+
+.page.active {
+    display: block;
+}
+
+.page-header {
+    margin-bottom: 20px;
+}
+
+.page-header h1 {
+    font-size: 24px;
+    color: #333;
+}
+
+/* 首页 - 俯视图 */
+.map-container {
+    position: relative;
+    width: 100%;
+    height: calc(100vh - 120px); /* 减去导航栏和标题的高度 */
+    max-height: calc(100vh - 120px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    padding: 0;
+}
+
+.map-image {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: contain; /* 保持宽高比，不拉伸，铺满容器但不超出 */
+    object-position: center center;
+}
+
+.map-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+    pointer-events: none; /* 默认不拦截点击事件 */
+    z-index: 10; /* 确保canvas在图片上方 */
+}
+
+.map-controls {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 1000;
+    display: flex;
+    gap: 10px;
+}
+
+.btn-annotation, .btn-clear {
+    padding: 8px 16px;
+    background: #1890ff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.btn-annotation:hover, .btn-clear:hover {
+    background: #40a9ff;
+}
+
+.btn-clear {
+    background: #ff4d4f;
+}
+
+.btn-clear:hover {
+    background: #ff7875;
+}
+
+/* 标注覆盖层 */
+.annotation-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: all;
+    z-index: 100;
+}
+
+.annotation-grid-cell {
+    position: absolute;
+    border: 1px solid rgba(255, 0, 0, 0.1);
+    background: rgba(255, 255, 255, 0.01);
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.annotation-grid-cell:hover {
+    background: rgba(255, 0, 0, 0.2);
+    border-color: rgba(255, 0, 0, 0.5);
+}
+
+.annotation-grid-cell.has-annotation {
+    background: rgba(0, 255, 0, 0.1);
+    border-color: rgba(0, 255, 0, 0.3);
+}
+
+.annotation-input-modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    z-index: 10000;
+    min-width: 300px;
+}
+
+.annotation-input-modal h3 {
+    margin: 0 0 15px 0;
+    font-size: 16px;
+    color: #333;
+}
+
+.annotation-input-modal input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    box-sizing: border-box;
+    margin-bottom: 15px;
+}
+
+.annotation-input-modal .btn-group {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.annotation-input-modal button {
+    padding: 6px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.annotation-input-modal .btn-save {
+    background: #1890ff;
+    color: white;
+}
+
+.annotation-input-modal .btn-cancel {
+    background: #f5f5f5;
+    color: #333;
+}
+
+/* 价格页 - 筛选器 */
+.filters-container {
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    align-items: center;
+}
+
+.filter-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.filter-group label {
+    font-size: 14px;
+    color: #666;
+    white-space: nowrap;
+}
+
+/* 自定义多选下拉框样式 */
+.custom-multiselect {
+    position: relative;
+    min-width: 150px;
+    width: 200px;
+}
+
+.multiselect-display {
+    min-height: 32px;
+    padding: 6px 30px 6px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: #fff;
+    cursor: pointer;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+    max-height: 64px; /* 最多2行 */
+    overflow-y: auto;
+    box-sizing: border-box;
+}
+
+.multiselect-display:after {
+    content: '▼';
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #666;
+    font-size: 10px;
+    pointer-events: none;
+}
+
+.multiselect-display .placeholder {
+    color: #999;
+    font-size: 14px;
+}
+
+.multiselect-display .selected-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 6px;
+    background: #e6f7ff;
+    border: 1px solid #91d5ff;
+    border-radius: 3px;
+    font-size: 12px;
+    color: #1890ff;
+    white-space: nowrap;
+}
+
+.multiselect-display .selected-tag .remove {
+    margin-left: 4px;
+    cursor: pointer;
+    color: #1890ff;
+    font-weight: bold;
+    font-size: 14px;
+    line-height: 1;
+}
+
+.multiselect-display .selected-tag .remove:hover {
+    color: #0050b3;
+}
+
+.multiselect-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: 4px;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.multiselect-options {
+    padding: 4px 0;
+}
+
+.multiselect-option {
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.2s;
+}
+
+.multiselect-option:hover {
+    background: #f5f5f5;
+}
+
+.multiselect-option.selected {
+    background: #e6f7ff;
+    color: #1890ff;
+}
+
+.multiselect-option.selected:before {
+    content: '✓ ';
+    margin-right: 4px;
+}
+
+.filter-group select,
+.filter-group input {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+/* 分数筛选器置灰样式 */
+.filter-group select.disabled,
+.filter-group select:disabled {
+    background-color: #f5f5f5;
+    color: #999;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.filter-group select.disabled:hover {
+    background-color: #f5f5f5;
+}
+
+.filter-group input[type="number"] {
+    width: 100px;
+}
+
+/* 按钮 */
+.btn-primary,
+.btn-secondary {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.btn-primary {
+    background-color: #1890ff;
+    color: #fff;
+}
+
+.btn-primary:hover {
+    background-color: #40a9ff;
+}
+
+.btn-secondary {
+    background-color: #52c41a;
+    color: #fff;
+}
+
+.btn-secondary:hover {
+    background-color: #73d13d;
+}
+
+/* 房源列表 */
+.houses-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(600px, 1fr)); /* 宽度加倍：从300px改为600px */
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.house-card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    transition: transform 0.3s, box-shadow 0.3s;
+    overflow: hidden; /* 防止内容溢出 */
+    word-wrap: break-word; /* 允许长文本换行 */
+}
+
+.house-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.house-card h3 {
+    font-size: 18px;
+    margin-bottom: 10px;
+    color: #1890ff;
+}
+
+.house-info {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr; /* 改为3列以展示更多信息 */
+    gap: 8px;
+    font-size: 14px;
+    color: #666;
+    padding-right: 15px; /* 增加右侧内边距，让整个信息区域离右侧更远 */
+    box-sizing: border-box; /* 确保padding包含在宽度内 */
+    width: 100%; /* 确保不超出父容器 */
+}
+
+.house-info-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px; /* 调整间距，避免溢出 */
+    padding: 4px 0; /* 增加垂直间距 */
+    min-width: 0; /* 允许flex项目缩小 */
+    box-sizing: border-box;
+}
+
+.house-info-label {
+    color: #999;
+    flex: 0 0 auto; /* 不放大，不缩小，根据内容自适应 */
+    min-width: 70px; /* 减少最小宽度，避免溢出 */
+    max-width: 120px; /* 限制最大宽度 */
+    word-wrap: break-word; /* 允许换行 */
+}
+
+.house-info-value {
+    font-weight: 500;
+    color: #333;
+    text-align: right; /* 右对齐 */
+    flex: 1 1 auto; /* 允许放大和缩小 */
+    min-width: 0; /* 允许缩小到0 */
+    padding-right: 10px; /* 增加右侧内边距，让值离右侧更远 */
+    word-wrap: break-word; /* 允许长文本换行 */
+    overflow-wrap: break-word; /* 确保长单词也能换行 */
+}
+
+.house-score {
+    margin-top: 10px;
+    padding: 8px;
+    background: #f0f8ff;
+    border-radius: 4px;
+    text-align: center;
+    font-size: 16px;
+    font-weight: bold;
+    color: #1890ff;
+}
+
+/* 分页 */
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.pagination button {
+    padding: 8px 16px;
+    border: 1px solid #ddd;
+    background: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.pagination button:hover:not(:disabled) {
+    background-color: #f0f8ff;
+    border-color: #1890ff;
+}
+
+.pagination button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.pagination .page-info {
+    padding: 8px 16px;
+    color: #666;
+}
+
+/* 期望值页面 */
+.expectation-container {
+    background: #fff;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.expectation-item {
+    margin-bottom: 30px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.expectation-item label {
+    min-width: 150px;
+    font-size: 16px;
+    color: #333;
+}
+
+.weight-slider {
+    flex: 1;
+    height: 6px;
+    border-radius: 3px;
+    background: #ddd;
+    outline: none;
+    -webkit-appearance: none;
+}
+
+.weight-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #6c757d;
+    cursor: pointer;
+    border: 2px solid #fff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    margin-top: -7px; /* 居中对齐，滑块高度6px，游标高度20px，需要向上偏移(20-6)/2=7px */
+}
+
+.weight-slider::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #6c757d;
+    cursor: pointer;
+    border: 2px solid #fff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.weight-slider::-webkit-slider-runnable-track {
+    background: #e0e0e0;
+    height: 6px;
+    border-radius: 3px;
+}
+
+.weight-slider::-moz-range-track {
+    background: #e0e0e0;
+    height: 6px;
+    border-radius: 3px;
+}
+
+.weight-value {
+    min-width: 30px;
+    text-align: center;
+    font-size: 18px;
+    font-weight: bold;
+    color: #1890ff;
+}
+
+/* 弹窗 */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+    overflow: auto;
+}
+
+.modal-content {
+    background-color: #fff;
+    margin: 5% auto;
+    padding: 30px;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 1000px;
+    max-height: 80vh;
+    overflow-y: auto;
+    position: relative;
+}
+
+.modal-close {
+    position: absolute;
+    right: 20px;
+    top: 20px;
+    font-size: 28px;
+    font-weight: bold;
+    color: #999;
+    cursor: pointer;
+    transition: color 0.3s;
+}
+
+.modal-close:hover {
+    color: #333;
+}
+
+.modal-houses-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.modal-house-card {
+    background: #f5f5f5;
+    padding: 15px;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+/* 横屏适配 */
+@media (orientation: landscape) {
+    .page {
+        padding: 15px;
+    }
+    
+    .filters-container {
+        padding: 15px;
+    }
+    
+    .houses-list {
+        grid-template-columns: repeat(auto-fill, minmax(560px, 1fr)); /* 宽度加倍：从280px改为560px */
+    }
+}
+
+/* 加载状态 */
+.loading {
+    text-align: center;
+    padding: 40px;
+    color: #999;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+}
+
+.empty-state::before {
+    content: "📋";
+    font-size: 48px;
+    display: block;
+    margin-bottom: 20px;
+}
+
+/* 新手引导 */
+#new-user-guide {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 2000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.guide-content {
+    background: #fff;
+    padding: 30px;
+    border-radius: 8px;
+    max-width: 500px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.guide-content h3 {
+    margin-bottom: 15px;
+    color: #1890ff;
+    font-size: 20px;
+}
+
+.guide-content p {
+    margin-bottom: 20px;
+    color: #666;
+    line-height: 1.6;
+}
+
+.guide-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+/* 期望值页面排序选择 */
+.sort-select {
+    padding: 6px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    margin-left: 10px;
+    min-width: 150px;
+}
+
+.expectation-item {
+    margin-bottom: 30px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.expectation-item label {
+    min-width: 200px;
+    font-size: 16px;
+    color: #333;
+}
+
+.expectation-item.full-width {
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.expectation-item.full-width label {
+    min-width: auto;
+    width: 100%;
+    margin-bottom: 10px;
+}
+
+.expectation-explanation {
+    margin-top: 40px;
+    padding: 20px;
+    background: #f5f5f5;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.8;
+    color: #666;
+}
+
+.expectation-explanation h4 {
+    margin-bottom: 15px;
+    color: #333;
+    font-size: 16px;
+}
+
+.expectation-explanation p {
+    margin-bottom: 10px;
+}
+
+/* 排序滑块容器 */
+.sort-sliders-container {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 15px;
+    background: #f5f5f5;
+    border-radius: 8px;
+    margin-top: 10px;
+}
+
+.sort-slider-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 15px;
+    background: #fff;
+    border: 2px solid #ddd;
+    border-radius: 6px;
+    cursor: move;
+    user-select: none;
+    transition: all 0.3s;
+    position: relative;
+}
+
+.sort-slider-item:hover {
+    border-color: #1890ff;
+    box-shadow: 0 2px 8px rgba(24, 144, 255, 0.2);
+}
+
+.sort-slider-item.dragging {
+    opacity: 0.5;
+    border-color: #1890ff;
+    box-shadow: 0 4px 12px rgba(24, 144, 255, 0.4);
+}
+
+.sort-slider-item .sort-label {
+    font-size: 14px;
+    color: #333;
+    font-weight: 500;
+}
+
+.sort-slider-item .sort-score {
+    font-size: 12px;
+    color: #1890ff;
+    font-weight: bold;
+    min-width: 40px;
+    text-align: right;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOut {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+
+/* Toast提示样式 */
+.toast-message {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #fff;
+    padding: 12px 20px;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 5000;
+    display: flex;
+    align-items: center;
+    opacity: 0;
+    transform: translateX(100%);
+    transition: all 0.3s ease;
+    font-size: 14px;
+    color: #333;
+    border-left: 4px solid #52c41a;
+}
+
+.toast-message.show {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+/* 梯度表样式 */
+.gradient-table {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-top: 10px;
+    padding: 15px;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    background-color: #fafafa;
+}
+
+.gradient-tier {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.tier-header {
+    font-weight: 600;
+    font-size: 14px;
+    color: #333;
+    padding: 6px 12px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 6px;
+    text-align: center;
+}
+
+.gradient-tier:nth-child(2) .tier-header {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.gradient-tier:nth-child(3) .tier-header {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+.tier-content {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-height: 50px;
+    padding: 10px;
+    background: white;
+    border-radius: 6px;
+    border: 2px dashed #e0e0e0;
+}
+
+.gradient-card {
+    background: #f0f0f0;
+    padding: 8px 16px;
+    border-radius: 20px;
+    cursor: grab;
+    user-select: none;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: #333;
+    border: 2px solid transparent;
+    position: relative;
+}
+
+.gradient-card:hover {
+    background: #e0e0e0;
+    border-color: #1890ff;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 8px rgba(24, 144, 255, 0.2);
+}
+
+.gradient-card.dragging {
+    opacity: 0.5;
+    border-color: #1890ff;
+    box-shadow: 0 4px 12px rgba(24, 144, 255, 0.4);
+    cursor: grabbing;
+}
+
+.card-label {
+    font-weight: 500;
+}
+
+.card-remove {
+    background: #ff4d4f;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: all 0.2s;
+}
+
+.card-remove:hover {
+    background: #ff7875;
+    transform: scale(1.1);
+}
+
+.add-room-input {
+    width: 100%;
+    padding: 8px;
+    background: #f9f9f9;
+    border-radius: 6px;
+    border: 1px dashed #d9d9d9;
+}
+
