@@ -232,6 +232,609 @@ body {
 }
 
 /* 价格页 - 筛选器 */
+/* 数据统计面板 */
+.statistics-panel {
+    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
+    margin-bottom: 24px;
+    overflow: hidden;
+    border: 1px solid rgba(24, 144, 255, 0.1);
+    transition: box-shadow 0.3s ease;
+}
+
+.statistics-panel:hover {
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.statistics-header {
+    padding: 18px 24px;
+    background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    user-select: none;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.statistics-header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.5s;
+}
+
+.statistics-header:hover::before {
+    left: 100%;
+}
+
+.statistics-header:hover {
+    background: linear-gradient(135deg, #40a9ff 0%, #1890ff 100%);
+}
+
+.statistics-header h2 {
+    font-size: 20px;
+    font-weight: 600;
+    color: #fff;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.statistics-header h2::before {
+    content: '📊';
+    font-size: 24px;
+}
+
+.statistics-toggle-icon {
+    font-size: 18px;
+    color: #fff;
+    transition: transform 0.3s ease;
+    font-weight: bold;
+}
+
+.statistics-panel.expanded .statistics-toggle-icon {
+    transform: rotate(180deg);
+}
+
+.statistics-content {
+    padding: 24px;
+    background: #fff;
+    min-height: calc(100vh - 200px);
+}
+
+/* 数据统计页面样式 */
+#statistics-page {
+    padding: 20px;
+}
+
+#statistics-page .statistics-content {
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    background: linear-gradient(135deg, #fafbfc 0%, #ffffff 100%);
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+.statistics-loading {
+    text-align: center;
+    padding: 60px 20px;
+    color: #666;
+    font-size: 16px;
+}
+
+.statistics-loading::after {
+    content: '...';
+    animation: loading-dots 1.5s steps(4, end) infinite;
+}
+
+@keyframes loading-dots {
+    0%, 20% { content: '.'; }
+    40% { content: '..'; }
+    60%, 100% { content: '...'; }
+}
+
+.statistics-body {
+    display: none;
+    animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.statistics-section {
+    margin-bottom: 32px;
+    padding: 20px;
+    background: linear-gradient(135deg, #fafbfc 0%, #ffffff 100%);
+    border-radius: 10px;
+    border: 1px solid #e8eef5;
+    transition: all 0.3s ease;
+}
+
+.statistics-section:hover {
+    box-shadow: 0 4px 12px rgba(24, 144, 255, 0.1);
+    border-color: #1890ff;
+    transform: translateY(-2px);
+}
+
+.statistics-section:last-child {
+    margin-bottom: 0;
+}
+
+.statistics-section h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin: 0 0 20px 0;
+    padding-bottom: 12px;
+    border-bottom: 3px solid transparent;
+    background: linear-gradient(to right, #1890ff, #40a9ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.statistics-section h3::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 60px;
+    height: 3px;
+    background: linear-gradient(90deg, #1890ff, #40a9ff);
+    border-radius: 2px;
+}
+
+.statistics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 20px;
+}
+
+.stat-item {
+    text-align: center;
+    padding: 24px 20px;
+    background: linear-gradient(135deg, #ffffff 0%, #f0f7ff 100%);
+    border-radius: 12px;
+    border: 2px solid #e6f4ff;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.stat-item::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #1890ff, #40a9ff, #69c0ff);
+    transform: scaleX(0);
+    transition: transform 0.3s ease;
+}
+
+.stat-item:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(24, 144, 255, 0.15);
+    border-color: #1890ff;
+}
+
+.stat-item:hover::before {
+    transform: scaleX(1);
+}
+
+.stat-label {
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.stat-value {
+    font-size: 32px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1.2;
+}
+
+/* 价格分布图表 */
+/* 价格分布折线图容器 */
+.price-line-chart-container {
+    margin-top: 24px;
+    padding: 30px;
+    background: linear-gradient(135deg, #ffffff 0%, #f8faff 100%);
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    border: 1px solid rgba(24, 144, 255, 0.1);
+    width: 100%;
+    transition: all 0.3s ease;
+}
+
+.price-line-chart-container:hover {
+    box-shadow: 0 6px 24px rgba(24, 144, 255, 0.12);
+    transform: translateY(-2px);
+}
+
+#price-line-chart {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+}
+
+/* 楼栋柱状图容器 */
+.building-bar-chart-container {
+    margin-top: 24px;
+    padding: 30px;
+    background: linear-gradient(135deg, #ffffff 0%, #f8faff 100%);
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    border: 1px solid rgba(24, 144, 255, 0.1);
+    width: 100%;
+    transition: all 0.3s ease;
+}
+
+.building-bar-chart-container:hover {
+    box-shadow: 0 6px 24px rgba(24, 144, 255, 0.12);
+    transform: translateY(-2px);
+}
+
+#building-bar-chart {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .price-line-chart-container,
+    .building-bar-chart-container {
+        padding: 20px 15px;
+        margin-top: 16px;
+    }
+    
+    #price-line-chart,
+    #building-bar-chart {
+        width: 100%;
+        height: auto;
+    }
+}
+
+.price-chart-container {
+    margin-top: 20px;
+}
+
+.price-bar {
+    display: flex;
+    align-items: center;
+    margin-bottom: 16px;
+    gap: 12px;
+}
+
+.price-bar-label {
+    width: 130px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #333;
+    flex-shrink: 0;
+    text-align: right;
+}
+
+.price-bar-chart {
+    flex: 1;
+    height: 36px;
+    background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf0 100%);
+    border-radius: 8px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.price-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #1890ff 0%, #40a9ff 50%, #69c0ff 100%);
+    border-radius: 8px;
+    transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 12px;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(24, 144, 255, 0.3);
+    position: relative;
+    overflow: hidden;
+}
+
+.price-bar-fill::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    0% { left: -100%; }
+    100% { left: 100%; }
+}
+
+.price-bar-value {
+    width: 70px;
+    text-align: right;
+    font-size: 15px;
+    font-weight: 600;
+    color: #1a1a1a;
+    flex-shrink: 0;
+}
+
+/* 房型分布 */
+.room-type-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+}
+
+.room-type-item {
+    padding: 18px;
+    background: linear-gradient(135deg, #ffffff 0%, #f8faff 100%);
+    border-radius: 10px;
+    border-left: 4px solid #1890ff;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.room-type-item:hover {
+    transform: translateX(4px);
+    box-shadow: 0 4px 16px rgba(24, 144, 255, 0.15);
+    border-left-width: 6px;
+}
+
+.room-type-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.room-type-name {
+    font-weight: 600;
+    font-size: 15px;
+    color: #1a1a1a;
+}
+
+.room-type-count {
+    color: #1890ff;
+    font-weight: 700;
+    font-size: 18px;
+    background: linear-gradient(135deg, #1890ff, #40a9ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.room-type-percent {
+    font-size: 13px;
+    color: #8c8c8c;
+    font-weight: 500;
+    padding-top: 4px;
+    border-top: 1px solid #e8e8e8;
+}
+
+/* 楼层分布 */
+.floor-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 12px;
+}
+
+.floor-item {
+    padding: 16px 12px;
+    background: linear-gradient(135deg, #ffffff 0%, #f0f7ff 100%);
+    border-radius: 10px;
+    text-align: center;
+    border: 2px solid #e6f4ff;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.floor-item::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(circle at center, rgba(24, 144, 255, 0.1), transparent);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.floor-item:hover {
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 0 6px 20px rgba(24, 144, 255, 0.2);
+    border-color: #1890ff;
+}
+
+.floor-item:hover::after {
+    opacity: 1;
+}
+
+.floor-item-label {
+    font-size: 13px;
+    color: #666;
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+.floor-item-value {
+    font-size: 22px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #1890ff, #40a9ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1.2;
+}
+
+/* 楼栋统计 */
+.building-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 16px;
+}
+
+.building-item {
+    padding: 20px;
+    background: linear-gradient(135deg, #ffffff 0%, #f8faff 100%);
+    border-radius: 12px;
+    text-align: center;
+    border: 2px solid #e6f4ff;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.building-item::before {
+    content: '🏢';
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-size: 24px;
+    opacity: 0.1;
+}
+
+.building-item:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(24, 144, 255, 0.15);
+    border-color: #1890ff;
+    background: linear-gradient(135deg, #f0f7ff 0%, #ffffff 100%);
+}
+
+.building-item-name {
+    font-weight: 600;
+    font-size: 15px;
+    color: #1a1a1a;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.building-item-count {
+    font-size: 28px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #1890ff, #096dd9);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1.2;
+}
+
+/* 楼栋对比分析 */
+.building-comparison {
+    overflow-x: auto;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.building-comparison-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    min-width: 800px;
+    background: #fff;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.building-comparison-table th,
+.building-comparison-table td {
+    padding: 16px;
+    text-align: left;
+    border-bottom: 1px solid #e8eef5;
+}
+
+.building-comparison-table th {
+    background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%);
+    font-weight: 600;
+    color: #fff;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    text-transform: uppercase;
+    font-size: 13px;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.building-comparison-table th:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 11;
+    background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%);
+}
+
+.building-comparison-table td {
+    background: #fff;
+    color: #333;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.building-comparison-table td:first-child {
+    position: sticky;
+    left: 0;
+    background: #fff;
+    z-index: 1;
+    font-weight: 600;
+    color: #1a1a1a;
+}
+
+.building-comparison-table tbody tr {
+    transition: all 0.2s ease;
+}
+
+.building-comparison-table tbody tr:hover {
+    background: linear-gradient(135deg, #f0f7ff 0%, #e6f4ff 100%);
+    transform: scale(1.01);
+    box-shadow: 0 2px 8px rgba(24, 144, 255, 0.1);
+}
+
+.building-comparison-table tbody tr:hover td:first-child {
+    background: linear-gradient(135deg, #f0f7ff 0%, #e6f4ff 100%);
+}
+
+.building-comparison-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
 .filters-container {
     background: #fff;
     padding: 20px;
@@ -368,6 +971,71 @@ body {
     font-size: 14px;
 }
 
+/* 开关样式 */
+.toggle-switch-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 26px;
+    cursor: pointer;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: 0.3s;
+    border-radius: 26px;
+}
+
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: 0.3s;
+    border-radius: 50%;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background-color: #1890ff;
+}
+
+.toggle-switch input:checked + .toggle-slider:before {
+    transform: translateX(24px);
+}
+
+.toggle-switch:hover .toggle-slider {
+    box-shadow: 0 0 4px rgba(24, 144, 255, 0.5);
+}
+
+.toggle-label {
+    font-size: 14px;
+    color: #333;
+    user-select: none;
+    min-width: 60px;
+    display: inline-block;
+}
+
 /* 分数筛选器置灰样式 */
 .filter-group select.disabled,
 .filter-group select:disabled {
@@ -385,9 +1053,89 @@ body {
     width: 100px;
 }
 
+/* 筛选器快捷预设 */
+.filter-presets {
+    display: flex;
+    gap: 16px;
+    margin-top: 20px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+    padding: 20px;
+    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+    border-radius: 12px;
+    border: 1px solid #e8eef5;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.preset-btn {
+    padding: 12px 24px;
+    border: 2px solid #e8eef5;
+    background: linear-gradient(135deg, #ffffff 0%, #fafbfc 100%);
+    color: #333;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    min-width: 120px;
+    text-align: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.preset-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+    transition: left 0.5s;
+}
+
+.preset-btn:hover::before {
+    left: 100%;
+}
+
+.preset-btn:hover {
+    border-color: #1890ff;
+    color: #1890ff;
+    background: linear-gradient(135deg, #f0f8ff 0%, #e6f4ff 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(24, 144, 255, 0.2);
+}
+
+.preset-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(24, 144, 255, 0.15);
+}
+
+.preset-btn.preset-reset {
+    border-color: #ffccc7;
+    color: #ff4d4f;
+    background: linear-gradient(135deg, #fff1f0 0%, #ffffff 100%);
+}
+
+.preset-btn.preset-reset::before {
+    background: linear-gradient(90deg, transparent, rgba(255, 77, 79, 0.1), transparent);
+}
+
+.preset-btn.preset-reset:hover {
+    border-color: #ff7875;
+    color: #ff4d4f;
+    background: linear-gradient(135deg, #ffe7e5 0%, #fff1f0 100%);
+    box-shadow: 0 4px 12px rgba(255, 77, 79, 0.2);
+}
+
 /* 按钮 */
 .btn-primary,
-.btn-secondary {
+.btn-secondary,
+.btn-export {
     padding: 10px 20px;
     border: none;
     border-radius: 4px;
@@ -398,6 +1146,11 @@ body {
 
 .btn-primary {
     background-color: #1890ff;
+    color: #fff;
+}
+
+.btn-export {
+    background-color: #52c41a;
     color: #fff;
 }
 
@@ -444,20 +1197,87 @@ body {
     color: #1890ff;
 }
 
+/* 八期需求：收藏功能样式 */
+.house-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.house-card-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.btn-favorite {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 20px;
+    padding: 4px 8px;
+    transition: transform 0.2s;
+    flex-shrink: 0;
+    min-width: 36px;
+    text-align: center;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-favorite:hover {
+    transform: scale(1.2);
+}
+
+.btn-favorite.favorite-active {
+    animation: favoritePulse 0.3s;
+}
+
+@keyframes favoritePulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.3); }
+}
+
+.house-card-favorite {
+    border: 2px solid #ff4d4f;
+    background: linear-gradient(to right, #fff 0%, #fffef0 100%);
+}
+
+.modal-house-card.house-card-favorite {
+    border: 2px solid #ff4d4f;
+    background: linear-gradient(to right, #fff 0%, #fffef0 100%);
+}
+
 /* 三期需求：参考房型按钮 */
 .btn-reference {
-    position: absolute;
-    top: 15px;
-    right: 15px;
-    padding: 6px 12px;
+    padding: 6px 14px;
     background: #1890ff;
     color: white;
     border: none;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 12px;
-    z-index: 10;
+    font-size: 13px;
     transition: background 0.3s;
+    flex-shrink: 0;
+    white-space: nowrap;
+    display: inline-block;
+    line-height: 1.5;
+}
+
+/* 弹窗中的参考房型按钮使用绝对定位 */
+.modal-house-card .btn-reference {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 10;
+}
+
+/* 房源列表中的参考房型按钮不使用绝对定位 */
+.house-card-actions .btn-reference {
+    position: static;
 }
 
 .btn-reference:hover {
@@ -759,6 +1579,100 @@ body {
     color: #333;
 }
 
+/* 老带新活动页面样式 */
+.referral-page-content {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 40px 20px;
+    min-height: calc(100vh - 200px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.referral-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 40px;
+    width: 100%;
+    padding: 40px;
+    background: linear-gradient(135deg, #ffffff 0%, #f8faff 100%);
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    border: 1px solid rgba(24, 144, 255, 0.1);
+}
+
+.referral-text {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    text-align: center;
+}
+
+.referral-main-text {
+    font-size: 24px;
+    font-weight: 600;
+    color: #333;
+    margin: 0;
+}
+
+.referral-subtitle {
+    font-size: 18px;
+    color: #666;
+    margin: 0;
+}
+
+.referral-qrcode {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 30px;
+    background: #f8f9fa;
+    border-radius: 16px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+}
+
+.referral-qrcode:hover {
+    box-shadow: 0 4px 16px rgba(24, 144, 255, 0.2);
+    transform: translateY(-2px);
+}
+
+.qrcode-image {
+    max-width: 350px;
+    max-height: 350px;
+    width: 100%;
+    height: auto;
+    border-radius: 12px;
+    display: block;
+}
+
+/* 手机端适配 */
+@media (max-width: 768px) {
+    .referral-page-content {
+        padding: 20px 15px;
+    }
+    
+    .referral-content {
+        padding: 30px 20px;
+        gap: 30px;
+    }
+    
+    .referral-main-text {
+        font-size: 20px;
+    }
+    
+    .referral-subtitle {
+        font-size: 16px;
+    }
+    
+    .qrcode-image {
+        max-width: 280px;
+        max-height: 280px;
+    }
+}
+
 .modal-filter-controls {
     margin: 15px 0;
     padding: 10px 0;
@@ -793,7 +1707,8 @@ body {
     margin-top: 20px;
     max-height: calc(80vh - 150px); /* 减去标题、开关和padding的高度 */
     overflow-y: auto;
-    padding-right: 5px; /* 为滚动条留出空间 */
+    overflow-x: hidden; /* 防止横向滚动 */
+    padding: 4px 5px 0 0; /* 顶部留出空间，防止hover时上边线被遮挡 */
 }
 
 .modal-house-card {
@@ -802,14 +1717,16 @@ body {
     padding: 20px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     transition: transform 0.3s, box-shadow 0.3s;
-    overflow: hidden;
+    overflow: visible; /* 改为visible，确保hover时边框不被裁剪 */
     word-wrap: break-word;
     position: relative;
+    z-index: 1; /* 添加z-index，确保hover时在其他元素之上 */
 }
 
 .modal-house-card:hover {
     transform: translateY(-4px);
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 2; /* hover时提升层级 */
 }
 
 .modal-house-card h4 {
@@ -858,9 +1775,15 @@ body {
     padding-right: 0; /* 移除右侧padding */
     word-wrap: break-word;
     overflow-wrap: break-word;
-    white-space: nowrap; /* 防止换行 */
-    overflow: hidden;
-    text-overflow: ellipsis; /* 超出部分显示省略号 */
+    white-space: normal; /* 允许换行，完整显示内容 */
+    overflow: visible; /* 允许内容溢出，完整显示 */
+}
+
+/* 景观字段特殊处理：完整显示，不截断 */
+.modal-house-card .house-info-item:has(.house-info-label:contains("景观")) .house-info-value {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
 }
 
 /* 横屏适配 */
@@ -1286,6 +2209,52 @@ body {
         padding: 8px 12px;
         font-size: 12px;
     }
+}
+
+/* 防盗水印 */
+/* 防盗水印 */
+.watermark-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* 不阻挡交互元素 */
+    z-index: 9999; /* 确保在最上层，但不遮挡交互元素（modal等通常是10000+） */
+    overflow: hidden;
+    user-select: none; /* 禁止选中 */
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, 300px);
+    grid-template-rows: repeat(auto-fill, 300px);
+    gap: 0;
+}
+
+.watermark-item {
+    position: relative;
+    width: 300px;
+    height: 300px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(0, 0, 0, 0.15); /* 透明度，不刺眼但清晰可见 */
+    font-size: 16px;
+    font-weight: 500;
+    white-space: nowrap;
+    transform: rotate(-25deg); /* 旋转角度 */
+    transform-origin: center;
+    pointer-events: none; /* 不阻挡交互 */
+    user-select: none; /* 禁止选中 */
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    /* 禁止右键菜单（通过CSS无法完全禁止，但可以配合JS） */
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    padding: 20px;
+    box-sizing: border-box;
 }
 
 /* 新手引导：圆点颜色说明 */

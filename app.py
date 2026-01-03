@@ -2,21 +2,53 @@ from flask import Flask, jsonify, request, send_from_directory, send_file
 from flask_cors import CORS
 import sqlite3
 import os
+import shutil
+from datetime import datetime
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 # 允许所有来源的跨域请求（用于 Cloudflare Pages 部署）
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 DB_PATH = 'house_data.db'
+BACKUP_DIR = 'db_backups'  # 备份目录
 
 def get_db_connection():
     """获取数据库连接"""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row  # 返回字典格式
-    # 初始化标注表和举报表
+    # 初始化标注表、举报表和埋点事件表
     init_annotations_table(conn)
     init_reports_table(conn)
+    init_event_tracking_table(conn)
+    
+    # 自动备份：每次连接时检查是否需要备份（每天备份一次）
+    auto_backup_database()
+    
     return conn
+
+def auto_backup_database():
+    """自动备份数据库（每天备份一次）"""
+    try:
+        # 确保备份目录存在
+        if not os.path.exists(BACKUP_DIR):
+            os.makedirs(BACKUP_DIR)
+        
+        # 检查今天是否已经备份过
+        today = datetime.now().strftime('%Y%m%d')
+        
+        # 列出今天的备份文件
+        today_backups = [f for f in os.listdir(BACKUP_DIR) if f.startswith(f'house_data_backup_{today}_')]
+        
+        # 如果今天还没有备份，则创建备份
+        if not today_backups:
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            backup_filename = f'house_data_backup_{timestamp}.db'
+            backup_path = os.path.join(BACKUP_DIR, backup_filename)
+            shutil.copy2(DB_PATH, backup_path)
+            print(f'自动备份数据库成功: {backup_path}')
+    except Exception as e:
+        # 自动备份失败不影响主功能，只记录错误
+        print(f'自动备份数据库失败: {e}')
 
 def init_annotations_table(conn):
     """初始化标注表"""
@@ -44,6 +76,23 @@ def init_reports_table(conn):
             contact TEXT NOT NULL,
             content TEXT NOT NULL,
             ip TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    conn.commit()
+
+def init_event_tracking_table(conn):
+    """初始化埋点事件表"""
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS event_tracking (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_type TEXT NOT NULL,
+            event_name TEXT NOT NULL,
+            event_params TEXT,
+            page_path TEXT,
+            user_agent TEXT,
+            ip_address TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -460,6 +509,43 @@ def submit_report():
     conn.close()
     
     return jsonify({'success': True})
+
+@app.route('/api/events/track', methods=['POST'])
+def track_event():
+    """记录埋点事件"""
+    try:
+        data = request.get_json() or {}
+        event_type = data.get('event_type', '')
+        event_name = data.get('event_name', '')
+        event_params = data.get('event_params', {})
+        page_path = data.get('page_path', '')
+        
+        # 基本校验
+        if not event_type or not event_name:
+            return jsonify({'success': False, 'error': '事件类型和事件名称不能为空'}), 400
+        
+        # 获取IP和User-Agent
+        ip = request.headers.get('X-Forwarded-For', '').split(',')[0].strip() or request.remote_addr
+        user_agent = request.headers.get('User-Agent', '')
+        
+        # 将event_params转换为JSON字符串
+        import json
+        event_params_str = json.dumps(event_params, ensure_ascii=False) if event_params else None
+        
+        # 保存到数据库
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO event_tracking (event_type, event_name, event_params, page_path, user_agent, ip_address)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (event_type, event_name, event_params_str, page_path, user_agent, ip))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f'埋点事件保存失败: {e}')
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/')
 def index():

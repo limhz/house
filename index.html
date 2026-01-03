@@ -7,17 +7,22 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+    <!-- 防盗水印 -->
+    <div id="watermark-container" class="watermark-container"></div>
+    
     <!-- Tab导航 -->
     <nav class="tab-nav">
-        <button class="tab-btn active" data-page="home">俯视图</button>
-        <button class="tab-btn" data-page="price">价格页</button>
-        <button class="tab-btn" data-page="expectation">期望值</button>
+        <button class="tab-btn active" data-page="home">首页</button>
+        <button class="tab-btn" data-page="price">完整房源列表</button>
+        <button class="tab-btn" data-page="statistics">数据统计</button>
+        <button class="tab-btn" data-page="expectation">选房偏好</button>
+        <button class="tab-btn" data-page="referral">老带新活动</button>
     </nav>
 
     <!-- 首页 -->
     <div id="home-page" class="page active">
         <div class="page-header">
-            <h1>小区俯视图</h1>
+            <h1>首页</h1>
         </div>
         <div class="map-container">
             <img src="image.png" alt="小区俯视图" id="map-image" class="map-image">
@@ -38,6 +43,7 @@
         <div class="page-header">
             <h1>房源列表</h1>
         </div>
+        
         <div class="filters-container">
             <div class="filter-group">
                 <label>楼栋:</label>
@@ -87,15 +93,46 @@
                 </select>
             </div>
             <div class="filter-group">
-                <label>分数排序:</label>
-                <select id="filter-score-sort" title="请先设置期望值权重">
+                <label>收藏:</label>
+                <div class="toggle-switch-wrapper">
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="filter-favorite-toggle">
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-label" id="filter-favorite-label" style="display: none;">我的收藏</span>
+                    </label>
+                </div>
+                <select id="filter-favorite" style="display: none;">
+                    <option value="">全部</option>
+                    <option value="favorite">我的收藏</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>排序:</label>
+                <select id="filter-sort" title="选择排序方式">
                     <option value="">不排序</option>
-                    <option value="desc">从高到低</option>
-                    <option value="asc">从低到高</option>
+                    <option value="score-desc">综合分数（从高到低）</option>
+                    <option value="score-asc">综合分数（从低到高）</option>
+                    <option value="price-asc">价格（从低到高）</option>
+                    <option value="price-desc">价格（从高到低）</option>
+                    <option value="floor-asc">楼层（从低到高）</option>
+                    <option value="floor-desc">楼层（从高到低）</option>
+                    <option value="area-desc">面积（从大到小）</option>
+                    <option value="area-asc">面积（从小到大）</option>
+                    <option value="building-asc">楼栋（A-Z）</option>
+                    <option value="building-desc">楼栋（Z-A）</option>
                 </select>
             </div>
             <button class="btn-primary" id="btn-search">搜索</button>
             <button class="btn-secondary" id="btn-calculate-score">计算分数</button>
+            <button class="btn-export" id="btn-export">导出Excel</button>
+        </div>
+        
+        <!-- 筛选器快捷预设 -->
+        <div class="filter-presets">
+            <button class="preset-btn" id="preset-unsold">只看未售出</button>
+            <button class="preset-btn" id="preset-three-room">只看三房</button>
+            <button class="preset-btn" id="preset-two-room">只看两房</button>
+            <button class="preset-btn preset-reset" id="preset-reset">重置筛选</button>
         </div>
         <div class="houses-list" id="houses-list">
             <!-- 房源列表将在这里动态加载 -->
@@ -105,10 +142,82 @@
         </div>
     </div>
 
+    <!-- 数据统计页面 -->
+    <div id="statistics-page" class="page">
+        <div class="page-header">
+            <h1>数据统计</h1>
+        </div>
+        
+        <div class="statistics-content" id="statistics-content">
+            <div class="statistics-loading" id="statistics-loading">加载中...</div>
+            <div class="statistics-body" id="statistics-body" style="display: none;">
+                <!-- 基础统计 -->
+                <div class="statistics-section">
+                    <h3>📊 基础统计</h3>
+                    <div class="statistics-grid">
+                        <div class="stat-item">
+                            <div class="stat-label">总房源数</div>
+                            <div class="stat-value" id="stat-total">-</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">已售出</div>
+                            <div class="stat-value" id="stat-sold">-</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">未售出</div>
+                            <div class="stat-value" id="stat-unsold">-</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 价格分布折线图 -->
+                <div class="statistics-section">
+                    <h3>💰 价格分布</h3>
+                    <div class="price-line-chart-container" id="price-line-chart-container">
+                        <canvas id="price-line-chart" width="800" height="400"></canvas>
+                    </div>
+                </div>
+                
+                <!-- 房型分布 -->
+                <div class="statistics-section">
+                    <h3>🏠 房型分布</h3>
+                    <div class="room-type-stats" id="room-type-stats"></div>
+                </div>
+                
+                <!-- 楼栋剩余房源柱状图 -->
+                <div class="statistics-section">
+                    <h3>🏘️ 各楼栋剩余房源数</h3>
+                    <div class="building-bar-chart-container" id="building-bar-chart-container">
+                        <canvas id="building-bar-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 期望值页面 -->
+    <!-- 老带新活动页面 -->
+    <div id="referral-page" class="page">
+        <div class="page-header">
+            <h1>老带新活动</h1>
+        </div>
+        <div class="referral-page-content">
+            <div class="referral-content">
+                <div class="referral-text">
+                    <p class="referral-main-text">未现场看过房的业主可以添加我微信参加活动</p>
+                    <p class="referral-subtitle">扫描下方二维码，添加微信好友</p>
+                </div>
+                <div class="referral-qrcode">
+                    <img src="image/weixin.jpg" alt="微信二维码" class="qrcode-image">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 选房偏好页面 -->
     <div id="expectation-page" class="page">
         <div class="page-header">
-            <h1>设置期望值权重</h1>
+            <h1>设置选房偏好</h1>
         </div>
         <div class="expectation-container">
             <div class="expectation-item">
@@ -224,6 +333,7 @@
         </div>
     </div>
 
+
     <!-- 新手引导：圆点颜色说明 -->
     <div id="dot-color-guide-overlay" class="guide-overlay" style="display: none;">
         <div class="guide-modal">
@@ -231,7 +341,7 @@
                 <h3>欢迎使用房源选择系统</h3>
             </div>
             <div class="guide-content">
-                <p>俯视图上的圆点颜色代表该房号剩余未售出的房源数量：</p>
+                <p>首页上的圆点颜色代表该房号剩余未售出的房源数量：</p>
                 <div class="guide-color-item">
                     <div class="guide-color-dot" style="background: rgba(255, 77, 79, 0.8);"></div>
                     <span><strong>红色</strong>：剩余 ≤ 10套</span>
@@ -313,6 +423,8 @@
     </div>
 
     <script src="config.js"></script>
+    <!-- SheetJS库用于导出Excel -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-// API基础URL
+﻿// API基础URL
 // 优先使用 config.js 中定义的 API_BASE，如果没有则使用默认值
 const API_BASE = (typeof window !== 'undefined' && window.API_BASE) || 
     (typeof window !== 'undefined' && window.location 
@@ -6,6 +6,47 @@ const API_BASE = (typeof window !== 'undefined' && window.API_BASE) ||
             ? 'http://localhost:5000/api'
             : window.location.protocol + '//' + window.location.hostname + '/api')
         : 'http://localhost:5000/api');
+
+// ==================== 埋点事件功能 ====================
+
+// 记录埋点事件
+function trackEvent(eventType, eventName, eventParams = {}) {
+    try {
+        const pagePath = window.location.pathname || '/';
+        
+        fetch(`${API_BASE}/events/track`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                event_type: eventType,
+                event_name: eventName,
+                event_params: eventParams,
+                page_path: pagePath
+            })
+        }).catch(error => {
+            // 静默失败，不影响用户体验
+            console.debug('埋点事件发送失败:', error);
+        });
+    } catch (error) {
+        // 静默失败，不影响用户体验
+        console.debug('埋点事件记录失败:', error);
+    }
+}
+
+// 获取当前页面名称
+function getCurrentPageName() {
+    const activePage = document.querySelector('.page.active');
+    if (activePage) {
+        const pageId = activePage.id;
+        if (pageId === 'home-page') return '首页';
+        if (pageId === 'price-page') return '完整房源列表';
+        if (pageId === 'statistics-page') return '数据统计';
+        if (pageId === 'expectation-page') return '选房偏好';
+    }
+    return '未知页面';
+}
 
 // 全局状态
 let currentPage = 1;
@@ -128,7 +169,21 @@ let preferredFloor = null;
 let mapInitialized = false;
 
 document.addEventListener('DOMContentLoaded', () => {
+    // 记录初始页面访问埋点（首页）
+    trackEvent('page_view', '访问首页', {
+        page: 'home',
+        pageName: '首页',
+        isInitialLoad: true
+    });
+    
+    // 初始化防盗水印
+    initWatermark();
+    
+    // 初始化统计面板
+    initStatisticsPanel();
     initTabs();
+    initFilterPresets();
+    initExportButton();
     // 初始进入即加载俯视图，避免首次点击按钮无反应
     initMap();
     initFilters();
@@ -268,6 +323,59 @@ function initDisclaimerModal() {
     }
 }
 
+// 初始化防盗水印
+function initWatermark() {
+    const watermarkContainer = document.getElementById('watermark-container');
+    if (!watermarkContainer) return;
+    
+    // 生成日期
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+    
+    // 水印文本
+    const watermarkText = `制作人木灯 | 不可用于盈利 | ${dateStr}`;
+    
+    // 创建水印元素（全屏平铺）
+    const watermarkSize = 300; // 每个水印块的尺寸
+    const rows = Math.ceil(window.innerHeight / watermarkSize) + 2;
+    const cols = Math.ceil(window.innerWidth / watermarkSize) + 2;
+    
+    let watermarkHTML = '';
+    for (let i = 0; i < rows; i++) {
+        for (let j = 0; j < cols; j++) {
+            watermarkHTML += `<div class="watermark-item">${watermarkText}</div>`;
+        }
+    }
+    
+    watermarkContainer.innerHTML = watermarkHTML;
+    
+    // 禁止水印元素的右键菜单
+    watermarkContainer.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        return false;
+    });
+    
+    // 监听窗口大小变化，重新生成水印
+    let resizeTimer;
+    const handleResize = () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+            initWatermark();
+        }, 300);
+    };
+    
+    // 移除旧的事件监听器（如果存在）
+    if (window._watermarkResizeHandler) {
+        window.removeEventListener('resize', window._watermarkResizeHandler);
+    }
+    
+    window._watermarkResizeHandler = handleResize;
+    window.addEventListener('resize', handleResize);
+}
+
 // Tab切换
 function initTabs() {
     const tabBtns = document.querySelectorAll('.tab-btn');
@@ -283,7 +391,24 @@ function initTabs() {
             
             // 更新页面显示
             pages.forEach(p => p.classList.remove('active'));
-            document.getElementById(`${targetPage}-page`).classList.add('active');
+            const targetPageEl = document.getElementById(`${targetPage}-page`);
+            if (targetPageEl) {
+                targetPageEl.classList.add('active');
+            }
+            
+            // 记录页面访问埋点（PV）
+            const pageNames = {
+                'home': '首页',
+                'price': '完整房源列表',
+                'statistics': '数据统计',
+                'expectation': '选房偏好',
+                'referral': '老带新活动'
+            };
+            const pageName = pageNames[targetPage] || targetPage;
+            trackEvent('page_view', `访问${pageName}`, {
+                page: targetPage,
+                pageName: pageName
+            });
             
             // 页面特定初始化
             if (targetPage === 'home') {
@@ -292,6 +417,11 @@ function initTabs() {
                 loadHouses();
                 // 检查是否需要显示新手引导
                 checkAndShowGuide();
+            } else if (targetPage === 'statistics') {
+                // 切换到数据统计页面时自动加载数据
+                loadStatistics();
+            } else if (targetPage === 'referral') {
+                // 老带新活动页面已在上面记录PV埋点
             }
         });
     });
@@ -1414,6 +1544,13 @@ async function showRoomColumnModal(roomKey) {
     const roomNo = buildingMatch[3];
     const buildingName = `${buildingNum}栋${buildingLetter}座`;
     
+    // 记录查看房源列表埋点
+    trackEvent('view_house_list', '查看房源列表', {
+        page: getCurrentPageName(),
+        roomKey: roomKey,
+        buildingName: buildingName
+    });
+    
     const modal = document.getElementById('building-modal');
     const modalTitle = document.getElementById('modal-building-name');
     const modalList = document.getElementById('modal-houses-list');
@@ -1501,13 +1638,27 @@ function renderModalHousesList() {
     }
     
     if (filteredHouses.length > 0) {
-        modalList.innerHTML = filteredHouses.map(house => `
-            <div class="modal-house-card">
+        modalList.innerHTML = filteredHouses.map(house => {
+            // 添加参考房型按钮
+            const displayRoomType = getDisplayRoomType(house);
+            const referenceButton = (displayRoomType && /^\d+[A-Z]/.test(displayRoomType)) ? 
+                `<button class="btn-reference" data-image="image/${encodeURIComponent(displayRoomType)}.jpg" style="position: absolute; top: 10px; right: 10px; padding: 6px 12px; background: #1890ff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; z-index: 10;">参考房型</button>` : '';
+            
+            // 八期需求：添加收藏按钮
+            const isFavorite = isHouseFavorite(house);
+            const favoriteIcon = isFavorite ? '❤️' : '🤍';
+            const favoriteClass = isFavorite ? 'favorite-active' : '';
+            const favoriteButton = `<button class="btn-favorite ${favoriteClass}" data-house-key="${house.楼栋名}_${house.房号}" title="${isFavorite ? '取消收藏' : '收藏'}" style="position: absolute; top: 10px; right: ${referenceButton ? '90px' : '10px'}; padding: 6px 12px; background: transparent; border: none; cursor: pointer; font-size: 16px; z-index: 20;">${favoriteIcon}</button>`;
+            
+            return `
+            <div class="modal-house-card ${isFavorite ? 'house-card-favorite' : ''}" style="position: relative; padding-top: 50px;">
+                ${favoriteButton}
+                ${referenceButton}
                 <h4>${house.楼栋名} ${house.房号}号</h4>
                 <div class="house-info">
                     <div class="house-info-item">
                         <span class="house-info-label">房型:</span>
-                        <span class="house-info-value">${getDisplayRoomType(house)}</span>
+                        <span class="house-info-value">${displayRoomType}</span>
                     </div>
                     <div class="house-info-item">
                         <span class="house-info-label">楼层:</span>
@@ -1531,11 +1682,66 @@ function renderModalHousesList() {
                     </div>
                     <div class="house-info-item">
                         <span class="house-info-label">景观:</span>
-                        <span class="house-info-value">${house.景观 !== null && house.景观 !== undefined ? house.景观 : '-'}</span>
+                        <span class="house-info-value">${formatView(house.景观)}</span>
                     </div>
                 </div>
             </div>
-        `).join('');
+        `;
+        }).join('');
+        
+        // 为弹窗中的参考房型按钮绑定事件
+        modalList.querySelectorAll('.btn-reference').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const imagePath = btn.getAttribute('data-image');
+                if (imagePath) {
+                    showRoomTypeImage(imagePath);
+                }
+            });
+        });
+        
+        // 为弹窗中的收藏按钮绑定事件
+        modalList.querySelectorAll('.btn-favorite').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const houseKey = btn.getAttribute('data-house-key');
+                const [building, room] = houseKey.split('_');
+                const house = filteredHouses.find(h => h.楼栋名 === building && h.房号 === room);
+                if (house) {
+                    const isNowFavorite = toggleFavorite(house);
+                    // 更新按钮状态
+                    btn.textContent = isNowFavorite ? '❤️' : '🤍';
+                    btn.title = isNowFavorite ? '取消收藏' : '收藏';
+                    btn.classList.toggle('favorite-active', isNowFavorite);
+                    // 更新卡片样式
+                    const card = btn.closest('.modal-house-card');
+                    if (card) {
+                        card.classList.toggle('house-card-favorite', isNowFavorite);
+                    }
+                }
+            });
+        });
+        
+        // 监听收藏状态改变事件，实时更新弹窗中的收藏状态
+        const favoriteChangeHandler = (e) => {
+            const { houseKey, isFavorite } = e.detail;
+            const btn = modalList.querySelector(`.btn-favorite[data-house-key="${houseKey}"]`);
+            if (btn) {
+                btn.textContent = isFavorite ? '❤️' : '🤍';
+                btn.title = isFavorite ? '取消收藏' : '收藏';
+                btn.classList.toggle('favorite-active', isFavorite);
+                const card = btn.closest('.modal-house-card');
+                if (card) {
+                    card.classList.toggle('house-card-favorite', isFavorite);
+                }
+            }
+        };
+        // 移除旧的监听器（如果存在）
+        window.removeEventListener('favoriteChanged', favoriteChangeHandler);
+        // 添加新的监听器
+        window.addEventListener('favoriteChanged', favoriteChangeHandler);
     } else {
         modalList.innerHTML = '<div class="loading">暂无未售出房源</div>';
     }
@@ -1543,6 +1749,12 @@ function renderModalHousesList() {
 
 // 显示楼栋弹窗
 async function showBuildingModal(buildingName) {
+    // 记录查看楼栋房源埋点
+    trackEvent('view_building', '查看楼栋房源', {
+        page: getCurrentPageName(),
+        buildingName: buildingName
+    });
+    
     const modal = document.getElementById('building-modal');
     const modalTitle = document.getElementById('modal-building-name');
     const modalList = document.getElementById('modal-houses-list');
@@ -1556,13 +1768,27 @@ async function showBuildingModal(buildingName) {
         const data = await response.json();
         
         if (data.data && data.data.length > 0) {
-            modalList.innerHTML = data.data.map(house => `
-                <div class="modal-house-card">
+            modalList.innerHTML = data.data.map(house => {
+                // 添加参考房型按钮
+                const displayRoomType = getDisplayRoomType(house);
+                const referenceButton = (displayRoomType && /^\d+[A-Z]/.test(displayRoomType)) ? 
+                    `<button class="btn-reference" data-image="image/${encodeURIComponent(displayRoomType)}.jpg" style="position: absolute; top: 10px; right: 10px; padding: 6px 12px; background: #1890ff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; z-index: 10;">参考房型</button>` : '';
+                
+                // 八期需求：添加收藏按钮
+                const isFavorite = isHouseFavorite(house);
+                const favoriteIcon = isFavorite ? '❤️' : '🤍';
+                const favoriteClass = isFavorite ? 'favorite-active' : '';
+                const favoriteButton = `<button class="btn-favorite ${favoriteClass}" data-house-key="${house.楼栋名}_${house.房号}" title="${isFavorite ? '取消收藏' : '收藏'}" style="position: absolute; top: 10px; right: ${referenceButton ? '90px' : '10px'}; padding: 6px 12px; background: transparent; border: none; cursor: pointer; font-size: 16px; z-index: 20;">${favoriteIcon}</button>`;
+                
+                return `
+                <div class="modal-house-card ${isFavorite ? 'house-card-favorite' : ''}" style="position: relative; padding-top: 50px;">
+                    ${favoriteButton}
+                    ${referenceButton}
                     <h4>${house.楼栋名} ${house.房号}号</h4>
                     <div class="house-info">
                         <div class="house-info-item">
                             <span class="house-info-label">房型:</span>
-                            <span class="house-info-value">${getDisplayRoomType(house)}</span>
+                            <span class="house-info-value">${displayRoomType}</span>
                         </div>
                         <div class="house-info-item">
                             <span class="house-info-label">楼层:</span>
@@ -1580,9 +1806,68 @@ async function showBuildingModal(buildingName) {
                             <span class="house-info-label">售出情况:</span>
                             <span class="house-info-value">${house.售出情况 || '-'}</span>
                         </div>
+                        <div class="house-info-item">
+                            <span class="house-info-label">景观:</span>
+                            <span class="house-info-value">${formatView(house.景观)}</span>
+                        </div>
                     </div>
                 </div>
-            `).join('');
+            `;
+            }).join('');
+            
+            // 为弹窗中的参考房型按钮绑定事件
+            modalList.querySelectorAll('.btn-reference').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const imagePath = btn.getAttribute('data-image');
+                    if (imagePath) {
+                        showRoomTypeImage(imagePath);
+                    }
+                });
+            });
+            
+            // 为弹窗中的收藏按钮绑定事件
+            modalList.querySelectorAll('.btn-favorite').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const houseKey = btn.getAttribute('data-house-key');
+                    const [building, room] = houseKey.split('_');
+                    const house = data.data.find(h => h.楼栋名 === building && h.房号 === room);
+                    if (house) {
+                        const isNowFavorite = toggleFavorite(house);
+                        // 更新按钮状态
+                        btn.textContent = isNowFavorite ? '❤️' : '🤍';
+                        btn.title = isNowFavorite ? '取消收藏' : '收藏';
+                        btn.classList.toggle('favorite-active', isNowFavorite);
+                        // 更新卡片样式
+                        const card = btn.closest('.modal-house-card');
+                        if (card) {
+                            card.classList.toggle('house-card-favorite', isNowFavorite);
+                        }
+                    }
+                });
+            });
+            
+            // 监听收藏状态改变事件，实时更新楼栋弹窗中的收藏状态
+            const favoriteChangeHandler = (e) => {
+                const { houseKey, isFavorite } = e.detail;
+                const btn = modalList.querySelector(`.btn-favorite[data-house-key="${houseKey}"]`);
+                if (btn) {
+                    btn.textContent = isFavorite ? '❤️' : '🤍';
+                    btn.title = isFavorite ? '取消收藏' : '收藏';
+                    btn.classList.toggle('favorite-active', isFavorite);
+                    const card = btn.closest('.modal-house-card');
+                    if (card) {
+                        card.classList.toggle('house-card-favorite', isFavorite);
+                    }
+                }
+            };
+            // 移除旧的监听器（如果存在）
+            window.removeEventListener('favoriteChanged', favoriteChangeHandler);
+            // 添加新的监听器
+            window.addEventListener('favoriteChanged', favoriteChangeHandler);
         } else {
             modalList.innerHTML = '<div class="empty-state">暂无房源数据</div>';
         }
@@ -1597,28 +1882,58 @@ function initModal() {
     const modal = document.getElementById('building-modal');
     const closeBtn = document.querySelector('.modal-close');
     
-    closeBtn.addEventListener('click', () => {
-        modal.style.display = 'none';
-    });
-    
-    window.addEventListener('click', (e) => {
-        if (e.target === modal) {
+    if (modal && closeBtn) {
+        closeBtn.addEventListener('click', () => {
             modal.style.display = 'none';
-        }
-    });
+        });
+        
+        window.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+    }
 }
 
 // 初始化筛选器
 function initFilters() {
     // 搜索按钮
     document.getElementById('btn-search').addEventListener('click', async () => {
-        // 检查分数排序是否已选中
-        const scoreFilter = document.getElementById('filter-score-sort');
-        if (scoreFilter && !scoreFilter.disabled && scoreFilter.value) {
-            // 如果分数排序已选中，重新获取所有筛选后的房源并重新排序
-            await performScoreSorting();
+        // 收集筛选条件用于埋点
+        const filters = {
+            building: document.getElementById('filter-building')?.value || '',
+            roomType: document.getElementById('filter-room-type')?.value || '',
+            area: document.getElementById('filter-area')?.value || '',
+            orientation: getCustomMultiselectValues('filter-orientation').join(',') || '',
+            priceMin: document.getElementById('filter-price-min')?.value || '',
+            priceMax: document.getElementById('filter-price-max')?.value || '',
+            floorMin: document.getElementById('filter-floor-min')?.value || '',
+            floorMax: document.getElementById('filter-floor-max')?.value || '',
+            soldStatus: document.getElementById('filter-sold-status')?.value || '',
+            favorite: document.getElementById('filter-favorite')?.value || ''
+        };
+        
+        // 记录搜索埋点
+        trackEvent('button_click', '搜索', {
+            page: getCurrentPageName(),
+            filters: filters
+        });
+        
+        // 检查排序是否已选中
+        const sortFilter = document.getElementById('filter-sort');
+        if (sortFilter && sortFilter.value) {
+            const sortValue = sortFilter.value;
+            if (sortValue.startsWith('score-')) {
+                // 分数排序：筛选器变化后需要重新执行分数排序
+                currentPage = 1; // 重置到第一页
+                await performScoreSorting(sortValue);
+            } else {
+                // 其他排序
+                currentPage = 1; // 重置到第一页
+                await performOtherSorting(sortValue);
+            }
         } else {
-            // 如果分数排序未选中，清除排序状态，正常加载数据
+            // 如果未选中排序，清除排序状态，正常加载数据
             isScoreSortingActive = false;
             sortedAllHouses = [];
             currentPage = 1;
@@ -1628,6 +1943,10 @@ function initFilters() {
     
     // 计算分数按钮
     document.getElementById('btn-calculate-score').addEventListener('click', async () => {
+        // 记录计算分数埋点
+        trackEvent('button_click', '计算分数', {
+            page: getCurrentPageName()
+        });
         await calculateScores();
     });
     
@@ -1637,45 +1956,76 @@ function initFilters() {
 
 // 更新分数筛选器状态（全局函数）
 function updateScoreFilterState() {
-    const scoreFilter = document.getElementById('filter-score-sort');
-    if (!scoreFilter) return;
+    const sortFilter = document.getElementById('filter-sort');
+    const scoreFilter = document.getElementById('filter-score-sort'); // 保留向后兼容
     
-    // 检查是否已设置期望值
+    // 检查是否已设置权重
     const saved = localStorage.getItem('houseWeights');
     let hasWeights = false;
     if (saved) {
-        const savedWeights = JSON.parse(saved);
-        // 检查是否有权重大于0（0表示无所谓）
-        hasWeights = Object.values(savedWeights).some(w => w > 0);
+        const weights = JSON.parse(saved);
+        hasWeights = Object.values(weights).some(w => w > 0);
     }
+    
     // 检查是否有价格期望值
-    const savedPrice = localStorage.getItem('houseExpectedPrice');
+    const savedPrice = localStorage.getItem('expectedPrice');
     const hasPriceExpectation = savedPrice && parseFloat(savedPrice) > 0;
     
-    // 同时检查当前weights变量（可能刚保存但还没写入localStorage）
-    const currentHasWeights = Object.values(weights).some(w => w > 0);
-    const currentHasPrice = expectedPrice && expectedPrice > 0;
+    // 更新新的排序筛选器
+    if (sortFilter) {
+        const scoreOptions = sortFilter.querySelectorAll('option[value^="score-"]');
+        scoreOptions.forEach(opt => {
+            if (hasWeights || hasPriceExpectation) {
+                opt.disabled = false;
+            } else {
+                opt.disabled = true;
+            }
+        });
+    }
     
-    if (hasWeights || hasPriceExpectation || currentHasWeights || currentHasPrice) {
-        scoreFilter.disabled = false;
-        scoreFilter.classList.remove('disabled');
-        scoreFilter.title = '';
-    } else {
-        scoreFilter.disabled = true;
-        scoreFilter.classList.add('disabled');
-        scoreFilter.value = '';
-        scoreFilter.title = '请先设置期望值权重';
+    // 向后兼容：更新旧的分数筛选器
+    if (scoreFilter) {
+        if (hasWeights || hasPriceExpectation) {
+            scoreFilter.disabled = false;
+            scoreFilter.classList.remove('disabled');
+            scoreFilter.title = '';
+        } else {
+            scoreFilter.disabled = true;
+            scoreFilter.classList.add('disabled');
+            scoreFilter.title = '请先设置选房偏好权重';
+        }
     }
 }
 
 // 执行分数排序（获取所有筛选后的房源，排序后保存到 sortedAllHouses）
-async function performScoreSorting() {
-    const scoreFilter = document.getElementById('filter-score-sort');
-    if (!scoreFilter || scoreFilter.disabled || !scoreFilter.value) {
+async function performScoreSorting(sortValue = null) {
+    // 记录排序埋点
+    trackEvent('sort', '分数排序', {
+        page: getCurrentPageName(),
+        sortType: sortValue || 'score-desc'
+    });
+    if (!sortValue) {
+        const sortFilter = document.getElementById('filter-sort');
+        if (sortFilter) {
+            sortValue = sortFilter.value;
+        } else {
+            const scoreFilter = document.getElementById('filter-score-sort');
+            if (scoreFilter) {
+                sortValue = scoreFilter.value;
+            }
+        }
+    }
+    
+    if (!sortValue || !sortValue.startsWith('score-')) {
         return false;
     }
     
-    const sortValue = scoreFilter.value;
+    const scoreFilter = document.getElementById('filter-score-sort');
+    if (scoreFilter && scoreFilter.disabled) {
+        return false;
+    }
+    
+    const sortOrder = sortValue.split('-')[1]; // 'desc' 或 'asc'
     
     // 检查是否已有缓存的分数
     const hasCachedScores = Object.keys(allHousesScoresCache).length > 0;
@@ -1713,6 +2063,7 @@ async function performScoreSorting() {
     if (floorMinSort) filtersForSort.append('楼层最低', floorMinSort);
     if (floorMaxSort) filtersForSort.append('楼层最高', floorMaxSort);
     if (soldSort) filtersForSort.append('售出情况', soldSort);
+    // 注意：收藏筛选不在API参数中，因为收藏数据在localStorage，需要前端过滤
     if (priceMinSort) {
         const v = parseFloat(priceMinSort);
         if (!isNaN(v)) filtersForSort.append('价格最低', (v * 10000).toString());
@@ -1729,7 +2080,117 @@ async function performScoreSorting() {
         return false;
     }
     
-    const allHouses = await response.json();
+    let allHouses = await response.json();
+    
+    // 八期需求：如果选择了"我的收藏"筛选，先获取所有收藏的房源，再应用其他筛选条件
+    const favoriteFilter = document.getElementById('filter-favorite').value;
+    if (favoriteFilter === 'favorite') {
+        const favorites = getFavoriteHouses();
+        console.log('分数排序-收藏列表:', favorites); // 调试信息
+        console.log('分数排序-收藏数量:', favorites.length); // 调试信息
+        
+        if (favorites.length === 0) {
+            // 如果没有收藏，直接清空列表
+            allHouses = [];
+            console.log('分数排序-没有收藏，清空列表'); // 调试信息
+        } else {
+            // 先获取所有收藏的房源（不应用其他筛选条件）
+            try {
+                const allHousesResponse = await fetch(`${API_BASE}/houses/all`);
+                if (allHousesResponse.ok) {
+                    const allHousesData = await allHousesResponse.json();
+                    // 从所有房源中筛选出收藏的房源
+                    let favoriteHouses = allHousesData.filter(house => {
+                        const houseKey = `${house.楼栋名}_${house.房号}`;
+                        return favorites.includes(houseKey);
+                    });
+                    
+                    // 然后应用其他筛选条件（与performScoreSorting中的筛选逻辑一致）
+                    const rawRoomType = document.getElementById('filter-room-type').value;
+                    let roomTypeParam = '';
+                    if (rawRoomType) {
+                        if (ROOM_TYPE_GROUPS[rawRoomType]) {
+                            roomTypeParam = ROOM_TYPE_GROUPS[rawRoomType].join(',');
+                        } else {
+                            roomTypeParam = rawRoomType;
+                        }
+                    }
+                    
+                    const filters = {
+                        '楼栋': document.getElementById('filter-building').value,
+                        '房型': roomTypeParam,
+                        '房子面积': document.getElementById('filter-area').value,
+                        '房子朝向': getCustomMultiselectValues('filter-orientation').join(','),
+                        '楼层最低': document.getElementById('filter-floor-min').value,
+                        '楼层最高': document.getElementById('filter-floor-max').value,
+                        '售出情况': document.getElementById('filter-sold-status').value,
+                        '价格最低': document.getElementById('filter-price-min').value ? 
+                            (parseFloat(document.getElementById('filter-price-min').value) * 10000).toString() : '',
+                        '价格最高': document.getElementById('filter-price-max').value ? 
+                            (parseFloat(document.getElementById('filter-price-max').value) * 10000).toString() : '',
+                    };
+                    
+                    // 应用筛选条件
+                    Object.keys(filters).forEach(key => {
+                        if (filters[key]) {
+                            favoriteHouses = favoriteHouses.filter(house => {
+                                if (key === '楼栋' && house.楼栋名 !== filters[key]) return false;
+                                if (key === '房型' && filters[key]) {
+                                    const houseRoomType = house.房子类型 || house.户型 || '';
+                                    if (ROOM_TYPE_GROUPS[rawRoomType]) {
+                                        if (!ROOM_TYPE_GROUPS[rawRoomType].includes(houseRoomType)) return false;
+                                    } else {
+                                        if (houseRoomType !== filters[key]) return false;
+                                    }
+                                }
+                                if (key === '房子面积' && filters[key]) {
+                                    const houseArea = parseFloat(house.房子面积) || 0;
+                                    if (filters[key] === '70' && houseArea !== 70) return false;
+                                    if (filters[key] === '90' && houseArea !== 90) return false;
+                                }
+                                if (key === '房子朝向' && filters[key]) {
+                                    const orientations = filters[key].split(',');
+                                    if (!orientations.includes(house.朝向)) return false;
+                                }
+                                if (key === '楼层最低' && filters[key]) {
+                                    const houseFloor = parseInt(house.房子楼层) || 0;
+                                    if (houseFloor < parseInt(filters[key])) return false;
+                                }
+                                if (key === '楼层最高' && filters[key]) {
+                                    const houseFloor = parseInt(house.房子楼层) || 0;
+                                    if (houseFloor > parseInt(filters[key])) return false;
+                                }
+                                if (key === '售出情况' && house.售出情况 !== filters[key]) return false;
+                                if (key === '价格最低' && house.价格) {
+                                    if (house.价格 < parseInt(filters[key])) return false;
+                                }
+                                if (key === '价格最高' && house.价格) {
+                                    if (house.价格 > parseInt(filters[key])) return false;
+                                }
+                                return true;
+                            });
+                        }
+                    });
+                    
+                    allHouses = favoriteHouses;
+                } else {
+                    // 如果获取所有房源失败，使用原来的逻辑
+                    allHouses = allHouses.filter(house => {
+                        const houseKey = `${house.楼栋名}_${house.房号}`;
+                        return favorites.includes(houseKey);
+                    });
+                }
+            } catch (error) {
+                console.error('获取所有房源失败，使用已筛选数据:', error);
+                // 如果获取所有房源失败，使用原来的逻辑
+                allHouses = allHouses.filter(house => {
+                    const houseKey = `${house.楼栋名}_${house.房号}`;
+                    return favorites.includes(houseKey);
+                });
+            }
+        }
+        console.log(`分数排序-筛选后房源数量: ${allHouses.length}`); // 调试信息
+    }
     
     // 调试：检查第一个房源的数据完整性
     if (allHouses.length > 0) {
@@ -1823,41 +2284,268 @@ async function performScoreSorting() {
     return true;
 }
 
-// 初始化分数筛选器
-function initScoreFilter() {
-    const scoreFilter = document.getElementById('filter-score-sort');
-    if (!scoreFilter) return;
+// 初始化排序筛选器（八期需求：支持多种排序方式）
+function initSortFilter() {
+    const sortFilter = document.getElementById('filter-sort');
+    if (!sortFilter) return;
     
-    // 初始状态
-    updateScoreFilterState();
-    
-    // 监听权重保存事件（通过监听期望值页面的保存按钮）
-    const saveBtn = document.getElementById('btn-save-weights');
-    if (saveBtn) {
-        saveBtn.addEventListener('click', () => {
-            setTimeout(updateScoreFilterState, 200); // 延迟更新，确保localStorage已保存
-        });
-    }
-    
-    // 分数筛选器变化事件
-    scoreFilter.addEventListener('change', async () => {
-        if (scoreFilter.disabled) {
-            return;
-        }
+    // 监听排序变化事件
+    sortFilter.addEventListener('change', async () => {
+        const sortValue = sortFilter.value;
         
-        const sortValue = scoreFilter.value;
-        if (sortValue) {
-            await performScoreSorting();
-        } else {
-            // 如果不排序，清除排序状态，重新加载数据（按数据库id排序）
+        if (!sortValue) {
+            // 不排序，清除排序状态，重新加载数据
             isScoreSortingActive = false;
             sortedAllHouses = [];
             currentPage = 1;
             loadHouses();
+            return;
+        }
+        
+        // 如果是分数排序，需要检查是否已设置权重
+        if (sortValue.startsWith('score-')) {
+            const scoreFilter = document.getElementById('filter-score-sort');
+            if (scoreFilter && scoreFilter.disabled) {
+                showToast('请先设置选房偏好权重', 'error');
+                sortFilter.value = '';
+                return;
+            }
+            await performScoreSorting(sortValue);
+        } else {
+            // 其他排序方式
+            await performOtherSorting(sortValue);
         }
     });
+}
+
+// 执行其他排序（价格、楼层、面积、楼栋）
+async function performOtherSorting(sortType) {
+    // 记录排序埋点
+    trackEvent('sort', '其他排序', {
+        page: getCurrentPageName(),
+        sortType: sortType
+    });
     
-    // 去掉提示逻辑，不再显示引导弹窗
+    try {
+        // 获取当前筛选条件
+        const rawRoomType = document.getElementById('filter-room-type').value;
+        let roomTypeParam = '';
+        if (rawRoomType) {
+            if (ROOM_TYPE_GROUPS[rawRoomType]) {
+                roomTypeParam = ROOM_TYPE_GROUPS[rawRoomType].join(',');
+            } else {
+                roomTypeParam = rawRoomType;
+            }
+        }
+
+        const filters = {
+            '楼栋': document.getElementById('filter-building').value,
+            '房型': roomTypeParam,
+            '房子面积': document.getElementById('filter-area').value,
+            '房子朝向': getCustomMultiselectValues('filter-orientation').join(','),
+            '楼层最低': document.getElementById('filter-floor-min').value,
+            '楼层最高': document.getElementById('filter-floor-max').value,
+            '售出情况': document.getElementById('filter-sold-status').value,
+            '价格最低': document.getElementById('filter-price-min').value ? 
+                (parseFloat(document.getElementById('filter-price-min').value) * 10000).toString() : '',
+            '价格最高': document.getElementById('filter-price-max').value ? 
+                (parseFloat(document.getElementById('filter-price-max').value) * 10000).toString() : '',
+            // 注意：收藏筛选不在API参数中，因为收藏数据在localStorage，需要前端过滤
+        };
+        
+        const params = new URLSearchParams();
+        Object.keys(filters).forEach(key => {
+            if (filters[key]) {
+                params.append(key, filters[key]);
+            }
+        });
+        
+        // 获取所有筛选后的房源
+        const response = await fetch(`${API_BASE}/houses/all?${params.toString()}`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        let allHouses = await response.json();
+        
+        // 八期需求：如果选择了"我的收藏"筛选，先获取所有收藏的房源，再应用其他筛选条件
+        const favoriteFilter = document.getElementById('filter-favorite').value;
+        if (favoriteFilter === 'favorite') {
+            const favorites = getFavoriteHouses();
+            console.log('其他排序-收藏列表:', favorites); // 调试信息
+            console.log('其他排序-收藏数量:', favorites.length); // 调试信息
+            
+            if (favorites.length === 0) {
+                // 如果没有收藏，直接清空列表
+                allHouses = [];
+                console.log('其他排序-没有收藏，清空列表'); // 调试信息
+            } else {
+                // 先获取所有收藏的房源（不应用其他筛选条件）
+                try {
+                    const allHousesResponse = await fetch(`${API_BASE}/houses/all`);
+                    if (allHousesResponse.ok) {
+                        const allHousesData = await allHousesResponse.json();
+                        // 从所有房源中筛选出收藏的房源
+                        let favoriteHouses = allHousesData.filter(house => {
+                            const houseKey = `${house.楼栋名}_${house.房号}`;
+                            return favorites.includes(houseKey);
+                        });
+                        
+                        // 然后应用其他筛选条件（与filters中的筛选逻辑一致）
+                        Object.keys(filters).forEach(key => {
+                            if (filters[key]) {
+                                favoriteHouses = favoriteHouses.filter(house => {
+                                    if (key === '楼栋' && house.楼栋名 !== filters[key]) return false;
+                                    if (key === '房型' && filters[key]) {
+                                        const houseRoomType = house.房子类型 || house.户型 || '';
+                                        if (ROOM_TYPE_GROUPS[rawRoomType]) {
+                                            if (!ROOM_TYPE_GROUPS[rawRoomType].includes(houseRoomType)) return false;
+                                        } else {
+                                            if (houseRoomType !== filters[key]) return false;
+                                        }
+                                    }
+                                    if (key === '房子面积' && filters[key]) {
+                                        const houseArea = parseFloat(house.房子面积) || 0;
+                                        if (filters[key] === '70' && houseArea !== 70) return false;
+                                        if (filters[key] === '90' && houseArea !== 90) return false;
+                                    }
+                                    if (key === '房子朝向' && filters[key]) {
+                                        const orientations = filters[key].split(',');
+                                        if (!orientations.includes(house.朝向)) return false;
+                                    }
+                                    if (key === '楼层最低' && filters[key]) {
+                                        const houseFloor = parseInt(house.房子楼层) || 0;
+                                        if (houseFloor < parseInt(filters[key])) return false;
+                                    }
+                                    if (key === '楼层最高' && filters[key]) {
+                                        const houseFloor = parseInt(house.房子楼层) || 0;
+                                        if (houseFloor > parseInt(filters[key])) return false;
+                                    }
+                                    if (key === '售出情况' && house.售出情况 !== filters[key]) return false;
+                                    if (key === '价格最低' && house.价格) {
+                                        if (house.价格 < parseInt(filters[key])) return false;
+                                    }
+                                    if (key === '价格最高' && house.价格) {
+                                        if (house.价格 > parseInt(filters[key])) return false;
+                                    }
+                                    return true;
+                                });
+                            }
+                        });
+                        
+                        allHouses = favoriteHouses;
+                    } else {
+                        // 如果获取所有房源失败，使用原来的逻辑
+                        allHouses = allHouses.filter(house => {
+                            const houseKey = `${house.楼栋名}_${house.房号}`;
+                            return favorites.includes(houseKey);
+                        });
+                    }
+                } catch (error) {
+                    console.error('获取所有房源失败，使用已筛选数据:', error);
+                    // 如果获取所有房源失败，使用原来的逻辑
+                    allHouses = allHouses.filter(house => {
+                        const houseKey = `${house.楼栋名}_${house.房号}`;
+                        return favorites.includes(houseKey);
+                    });
+                }
+            }
+            console.log(`其他排序-筛选后房源数量: ${allHouses.length}`); // 调试信息
+        }
+        
+        // 根据排序类型排序
+        const [sortField, sortOrder] = sortType.split('-');
+        
+        allHouses.sort((a, b) => {
+            let valueA, valueB;
+            
+            switch(sortField) {
+                case 'price':
+                    valueA = a.价格 || 0;
+                    valueB = b.价格 || 0;
+                    break;
+                case 'floor':
+                    valueA = a.房子楼层 || 0;
+                    valueB = b.房子楼层 || 0;
+                    break;
+                case 'area':
+                    valueA = parseFloat(a.房子面积) || 0;
+                    valueB = parseFloat(b.房子面积) || 0;
+                    break;
+                case 'building':
+                    valueA = (a.楼栋名 || '').toString();
+                    valueB = (b.楼栋名 || '').toString();
+                    break;
+                default:
+                    return 0;
+            }
+            
+            if (sortField === 'building') {
+                // 字符串排序
+                const result = valueA.localeCompare(valueB, 'zh-CN');
+                return sortOrder === 'asc' ? result : -result;
+            } else {
+                // 数字排序
+                if (valueA === valueB) {
+                    // 相同值按房号排序
+                    const roomA = parseInt((a.房号 || '').toString().replace(/\D/g, '')) || 0;
+                    const roomB = parseInt((b.房号 || '').toString().replace(/\D/g, '')) || 0;
+                    return roomA - roomB;
+                }
+                const result = valueA - valueB;
+                return sortOrder === 'asc' ? result : -result;
+            }
+        });
+        
+        // 保存排序后的数据
+        sortedAllHouses = allHouses;
+        isScoreSortingActive = true;
+        currentPage = 1;
+        
+        // 渲染第一页
+        const pageSize = 20;
+        const startIndex = 0;
+        const endIndex = pageSize;
+        const pageData = sortedAllHouses.slice(startIndex, endIndex);
+        
+        renderHousesList(pageData);
+        
+        // 更新分页信息
+        const totalPages = Math.ceil(sortedAllHouses.length / pageSize);
+        renderPagination({
+            total: sortedAllHouses.length,
+            total_pages: totalPages,
+            page: 1,
+            per_page: pageSize
+        });
+    } catch (error) {
+        console.error('排序失败:', error);
+        showToast('排序失败，请重试', 'error');
+    }
+}
+
+// 初始化分数筛选器（保留原有功能，用于兼容）
+function initScoreFilter() {
+    // 这个函数保留用于向后兼容，但主要逻辑已迁移到 initSortFilter
+    const scoreFilter = document.getElementById('filter-score-sort');
+    if (scoreFilter) {
+        // 如果存在旧的分数排序选择器，隐藏它
+        scoreFilter.style.display = 'none';
+    }
+    
+    // 初始化新的排序筛选器
+    initSortFilter();
+    
+    // 更新分数排序状态（用于判断是否可用）
+    updateScoreFilterState();
+    
+    // 监听权重保存事件
+    const saveBtn = document.getElementById('btn-save-weights');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', () => {
+            setTimeout(updateScoreFilterState, 200);
+        });
+    }
 }
 
 // 房型选项（具体户型）
@@ -1898,8 +2586,37 @@ async function loadFilterOptions() {
         // 楼层改为区间输入，不再使用下拉选项
         populateSelect('filter-sold-status', filterOptions.售出情况);
         
+        // 初始化收藏开关筛选器
+        initFavoriteToggle();
+        
     } catch (error) {
         console.error('加载筛选选项失败:', error);
+    }
+}
+
+// 初始化收藏开关筛选器
+function initFavoriteToggle() {
+    // 收藏开关：默认关闭（显示全部），开关打开时显示"我的收藏"
+    const favoriteToggle = document.getElementById('filter-favorite-toggle');
+    const favoriteSelect = document.getElementById('filter-favorite');
+    const favoriteLabel = document.getElementById('filter-favorite-label');
+    
+    if (favoriteToggle && favoriteSelect) {
+        // 默认关闭状态：显示全部
+        favoriteToggle.checked = false;
+        favoriteSelect.value = '';
+        
+        favoriteToggle.addEventListener('change', () => {
+            if (favoriteToggle.checked) {
+                // 开关打开：只显示收藏
+                favoriteSelect.value = 'favorite';
+            } else {
+                // 开关关闭：显示全部（不做筛选）
+                favoriteSelect.value = '';
+            }
+            // 触发搜索
+            document.getElementById('btn-search').click();
+        });
     }
 }
 
@@ -2076,13 +2793,26 @@ async function loadHouses() {
     const listContainer = document.getElementById('houses-list');
     listContainer.innerHTML = '<div class="loading">加载中...</div>';
     
-    // 如果分数排序已激活，从已排序的完整列表中取对应页的数据
-    const scoreFilter = document.getElementById('filter-score-sort');
-    if (isScoreSortingActive && scoreFilter && !scoreFilter.disabled && scoreFilter.value && sortedAllHouses.length > 0) {
+    // 如果排序已激活，从已排序的完整列表中取对应页的数据
+    const sortFilter = document.getElementById('filter-sort');
+    if (isScoreSortingActive && sortFilter && sortFilter.value && sortedAllHouses.length > 0) {
         const pageSize = 20;
         const startIndex = (currentPage - 1) * pageSize;
         const endIndex = startIndex + pageSize;
         const pageData = sortedAllHouses.slice(startIndex, endIndex);
+        
+        // 确保分页数据中的分数已正确应用（从缓存中读取）
+        pageData.forEach(house => {
+            if (house.id && allHousesDisplayScores[house.id] !== undefined) {
+                house.score = allHousesDisplayScores[house.id];
+            } else if (house.id && allHousesScoresCache[house.id] !== undefined) {
+                // 兜底：如果还没有生成映射分数，则先用原始分数
+                house.score = allHousesScoresCache[house.id];
+            } else if (house.score === undefined || house.score === null) {
+                // 如果缓存中没有，使用0（但确保score属性存在）
+                house.score = 0;
+            }
+        });
         
         housesData = pageData;
         
@@ -2135,6 +2865,7 @@ async function loadHouses() {
             (parseFloat(document.getElementById('filter-price-min').value) * 10000).toString() : '',
         '价格最高': document.getElementById('filter-price-max').value ? 
             (parseFloat(document.getElementById('filter-price-max').value) * 10000).toString() : '',
+        // 注意：收藏筛选不在API参数中，因为收藏数据在localStorage，需要前端过滤
     };
     
     // 构建查询参数
@@ -2158,6 +2889,39 @@ async function loadHouses() {
         
         housesData = data.data || [];
         
+        // 记录筛选操作埋点（在获取数据后，记录筛选结果数量）
+        const filterParams = {
+            building: document.getElementById('filter-building')?.value || '',
+            roomType: document.getElementById('filter-room-type')?.value || '',
+            area: document.getElementById('filter-area')?.value || '',
+            orientation: getCustomMultiselectValues('filter-orientation').join(',') || '',
+            priceMin: document.getElementById('filter-price-min')?.value || '',
+            priceMax: document.getElementById('filter-price-max')?.value || '',
+            floorMin: document.getElementById('filter-floor-min')?.value || '',
+            floorMax: document.getElementById('filter-floor-max')?.value || '',
+            soldStatus: document.getElementById('filter-sold-status')?.value || '',
+            favorite: document.getElementById('filter-favorite')?.value || ''
+        };
+        
+        // 统计实际筛选结果数量（考虑收藏筛选）
+        let resultCount = data.total || 0;
+        const favoriteFilter = document.getElementById('filter-favorite')?.value;
+        if (favoriteFilter === 'favorite') {
+            const favorites = typeof getFavoriteHouses === 'function' ? getFavoriteHouses() : [];
+            resultCount = housesData.filter(house => {
+                const houseKey = `${house.楼栋名}_${house.房号}`;
+                return favorites.includes(houseKey);
+            }).length;
+        }
+        
+        // 记录筛选操作埋点
+        trackEvent('filter', '筛选操作', {
+            page: getCurrentPageName(),
+            filters: filterParams,
+            resultCount: resultCount,
+            totalCount: data.total || 0
+        });
+        
         // 如果缓存中有分数，应用到当前页的房源（优先使用映射后的展示分数）
         housesData.forEach(house => {
             if (house.id && allHousesDisplayScores[house.id] !== undefined) {
@@ -2168,12 +2932,147 @@ async function loadHouses() {
             }
         });
         
+        // 八期需求：如果选择了"我的收藏"筛选，过滤收藏的房源（前端过滤，因为收藏数据在localStorage）
+        if (favoriteFilter === 'favorite') {
+            const favorites = getFavoriteHouses();
+            console.log('收藏筛选-收藏列表:', favorites); // 调试信息
+            console.log('收藏筛选-收藏数量:', favorites.length); // 调试信息
+            
+            if (favorites.length === 0) {
+                // 如果没有收藏，直接清空列表
+                housesData = [];
+                console.log('收藏筛选-没有收藏，清空列表'); // 调试信息
+            } else {
+                // 先获取所有收藏的房源（不应用其他筛选条件）
+                try {
+                    const allHousesResponse = await fetch(`${API_BASE}/houses/all`);
+                    if (allHousesResponse.ok) {
+                        const allHousesData = await allHousesResponse.json();
+                        // 从所有房源中筛选出收藏的房源
+                        const favoriteHouses = allHousesData.filter(house => {
+                            const houseKey = `${house.楼栋名}_${house.房号}`;
+                            return favorites.includes(houseKey);
+                        });
+                        
+                        // 然后应用其他筛选条件
+                        const rawRoomType = document.getElementById('filter-room-type').value;
+                        let roomTypeParam = '';
+                        if (rawRoomType) {
+                            if (ROOM_TYPE_GROUPS[rawRoomType]) {
+                                roomTypeParam = ROOM_TYPE_GROUPS[rawRoomType].join(',');
+                            } else {
+                                roomTypeParam = rawRoomType;
+                            }
+                        }
+                        
+                        const buildingFilter = document.getElementById('filter-building').value;
+                        const areaFilter = document.getElementById('filter-area').value;
+                        const orientationFilter = getCustomMultiselectValues('filter-orientation');
+                        const floorMinFilter = document.getElementById('filter-floor-min').value;
+                        const floorMaxFilter = document.getElementById('filter-floor-max').value;
+                        const soldStatusFilter = document.getElementById('filter-sold-status').value;
+                        const priceMinFilter = document.getElementById('filter-price-min').value;
+                        const priceMaxFilter = document.getElementById('filter-price-max').value;
+                        
+                        housesData = favoriteHouses.filter(house => {
+                            // 楼栋筛选
+                            if (buildingFilter && house.楼栋名 !== buildingFilter) return false;
+                            
+                            // 房型筛选
+                            if (roomTypeParam) {
+                                const houseRoomType = house.房子类型 || house.户型 || '';
+                                if (ROOM_TYPE_GROUPS[rawRoomType]) {
+                                    // 分组筛选
+                                    if (!ROOM_TYPE_GROUPS[rawRoomType].includes(houseRoomType)) return false;
+                                } else {
+                                    // 具体房型筛选
+                                    if (houseRoomType !== roomTypeParam) return false;
+                                }
+                            }
+                            
+                            // 面积筛选
+                            if (areaFilter) {
+                                const houseArea = parseFloat(house.房子面积) || 0;
+                                if (areaFilter === '70' && houseArea !== 70) return false;
+                                if (areaFilter === '90' && houseArea !== 90) return false;
+                            }
+                            
+                            // 朝向筛选
+                            if (orientationFilter.length > 0) {
+                                if (!orientationFilter.includes(house.朝向)) return false;
+                            }
+                            
+                            // 楼层筛选
+                            if (floorMinFilter) {
+                                const houseFloor = parseInt(house.房子楼层) || 0;
+                                if (houseFloor < parseInt(floorMinFilter)) return false;
+                            }
+                            if (floorMaxFilter) {
+                                const houseFloor = parseInt(house.房子楼层) || 0;
+                                if (houseFloor > parseInt(floorMaxFilter)) return false;
+                            }
+                            
+                            // 售出情况筛选
+                            if (soldStatusFilter && house.售出情况 !== soldStatusFilter) return false;
+                            
+                            // 价格筛选
+                            if (priceMinFilter && house.价格) {
+                                const priceInWan = house.价格 / 10000;
+                                if (priceInWan < parseFloat(priceMinFilter)) return false;
+                            }
+                            if (priceMaxFilter && house.价格) {
+                                const priceInWan = house.价格 / 10000;
+                                if (priceInWan > parseFloat(priceMaxFilter)) return false;
+                            }
+                            
+                            return true;
+                        });
+                    } else {
+                        // 如果获取所有房源失败，使用原来的逻辑（在已筛选的数据基础上过滤）
+                        housesData = housesData.filter(house => {
+                            const houseKey = `${house.楼栋名}_${house.房号}`;
+                            return favorites.includes(houseKey);
+                        });
+                    }
+                } catch (error) {
+                    console.error('获取所有房源失败，使用已筛选数据:', error);
+                    // 如果获取所有房源失败，使用原来的逻辑（在已筛选的数据基础上过滤）
+                    housesData = housesData.filter(house => {
+                        const houseKey = `${house.楼栋名}_${house.房号}`;
+                        return favorites.includes(houseKey);
+                    });
+                }
+            }
+            console.log(`收藏筛选-筛选后房源数量: ${housesData.length}`); // 调试信息
+        }
+        
         if (housesData.length > 0) {
             renderHousesList(housesData);
-            renderPagination(data);
+            // 如果进行了收藏筛选，需要重新计算分页
+            if (favoriteFilter === 'favorite') {
+                const totalPages = Math.ceil(housesData.length / 20);
+                renderPagination({
+                    total: housesData.length,
+                    total_pages: totalPages,
+                    page: 1,
+                    per_page: 20
+                });
+            } else {
+                renderPagination(data);
+            }
         } else {
             listContainer.innerHTML = '<div class="empty-state">暂无房源数据</div>';
-            renderPagination(data);  // 即使无数据也要显示分页信息
+            // 如果进行了收藏筛选，需要重新计算分页
+            if (favoriteFilter === 'favorite') {
+                renderPagination({
+                    total: 0,
+                    total_pages: 0,
+                    page: 1,
+                    per_page: 20
+                });
+            } else {
+                renderPagination(data);  // 即使无数据也要显示分页信息
+            }
         }
     } catch (error) {
         console.error('加载房源失败:', error);
@@ -2181,22 +3080,93 @@ async function loadHouses() {
     }
 }
 
+// 获取收藏列表
+function getFavoriteHouses() {
+    const favorites = localStorage.getItem('favoriteHouses');
+    return favorites ? JSON.parse(favorites) : [];
+}
+
+// 保存收藏列表
+function saveFavoriteHouses(favorites) {
+    localStorage.setItem('favoriteHouses', JSON.stringify(favorites));
+}
+
+// 检查房源是否已收藏
+function isHouseFavorite(house) {
+    const favorites = getFavoriteHouses();
+    const houseKey = `${house.楼栋名}_${house.房号}`;
+    return favorites.includes(houseKey);
+}
+
+// 切换收藏状态
+function toggleFavorite(house) {
+    const favorites = getFavoriteHouses();
+    const houseKey = `${house.楼栋名}_${house.房号}`;
+    const index = favorites.indexOf(houseKey);
+    
+    const isNowFavorite = index === -1; // 操作后是否已收藏
+    
+    if (index > -1) {
+        favorites.splice(index, 1);
+        showToast('已取消收藏', 'info');
+    } else {
+        favorites.push(houseKey);
+        showToast('已收藏', 'success');
+    }
+    
+    saveFavoriteHouses(favorites);
+    
+    // 触发收藏状态改变事件，通知其他页面更新
+    const favoriteChangeEvent = new CustomEvent('favoriteChanged', {
+        detail: {
+            houseKey: houseKey,
+            house: house,
+            isFavorite: isNowFavorite
+        }
+    });
+    window.dispatchEvent(favoriteChangeEvent);
+    
+    // 记录收藏埋点
+    trackEvent('favorite', isNowFavorite ? '收藏' : '取消收藏', {
+        page: getCurrentPageName(),
+        building: house.楼栋名,
+        room: house.房号,
+        houseKey: houseKey
+    });
+    
+    return isNowFavorite; // 返回是否已收藏
+}
+
 // 渲染房源列表
 function renderHousesList(houses) {
     const listContainer = document.getElementById('houses-list');
     
     listContainer.innerHTML = houses.map(house => {
-        const score = house.score ? `<div class="house-score">综合分数: ${house.score.toFixed(2)}</div>` : '';
+        // 确保分数正确显示：如果score属性存在（包括0），都显示分数
+        // 只有当score为undefined或null时才不显示
+        const score = (house.score !== undefined && house.score !== null) ? 
+            `<div class="house-score">综合分数: ${house.score.toFixed(2)}</div>` : '';
         
         // 三期需求：添加"参考房型"按钮和合并房型显示
         const displayRoomType = getDisplayRoomType(house);
         const referenceButton = (displayRoomType && /^\d+[A-Z]/.test(displayRoomType)) ? 
-            `<button class="btn-reference" data-image="image/${encodeURIComponent(displayRoomType)}.jpg" onclick="showRoomTypeImage('image/${encodeURIComponent(displayRoomType)}.jpg')">参考房型</button>` : '';
+            `<button class="btn-reference" data-image="image/${encodeURIComponent(displayRoomType)}.jpg">参考房型</button>` : '';
+        
+        // 八期需求：添加收藏按钮
+        const isFavorite = isHouseFavorite(house);
+        const favoriteIcon = isFavorite ? '❤️' : '🤍';
+        const favoriteClass = isFavorite ? 'favorite-active' : '';
+        const favoriteButton = `<button class="btn-favorite ${favoriteClass}" data-house-key="${house.楼栋名}_${house.房号}" title="${isFavorite ? '取消收藏' : '收藏'}">${favoriteIcon}</button>`;
         
         return `
-            <div class="house-card">
-                <h3>${house.楼栋名} ${house.房号}号</h3>
-                ${referenceButton}
+            <div class="house-card ${isFavorite ? 'house-card-favorite' : ''}">
+                <div class="house-card-header">
+                    <h3>${house.楼栋名} ${house.房号}号</h3>
+                    <div class="house-card-actions">
+                        ${favoriteButton}
+                        ${referenceButton}
+                    </div>
+                </div>
                 <div class="house-info">
                     <div class="house-info-item">
                         <span class="house-info-label">房型:</span>
@@ -2224,13 +3194,64 @@ function renderHousesList(houses) {
                     </div>
                     <div class="house-info-item">
                         <span class="house-info-label">景观:</span>
-                        <span class="house-info-value">${house.景观 !== null && house.景观 !== undefined ? house.景观 : '-'}</span>
+                        <span class="house-info-value">${formatView(house.景观)}</span>
                     </div>
                 </div>
                 ${score}
             </div>
         `;
     }).join('');
+    
+    // 为房源列表中的收藏按钮绑定事件
+    listContainer.querySelectorAll('.btn-favorite').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const houseKey = btn.getAttribute('data-house-key');
+            const [building, room] = houseKey.split('_');
+            const house = houses.find(h => h.楼栋名 === building && h.房号 === room);
+            if (house) {
+                const isNowFavorite = toggleFavorite(house);
+                // 更新按钮状态
+                btn.textContent = isNowFavorite ? '❤️' : '🤍';
+                btn.title = isNowFavorite ? '取消收藏' : '收藏';
+                btn.classList.toggle('favorite-active', isNowFavorite);
+                // 更新卡片样式
+                const card = btn.closest('.house-card');
+                if (card) {
+                    card.classList.toggle('house-card-favorite', isNowFavorite);
+                }
+            }
+        });
+    });
+    
+    // 监听收藏状态改变事件，实时更新列表页的收藏状态
+    window.addEventListener('favoriteChanged', (e) => {
+        const { houseKey, isFavorite } = e.detail;
+        // 更新列表页中对应房源的收藏状态
+        const btn = listContainer.querySelector(`.btn-favorite[data-house-key="${houseKey}"]`);
+        if (btn) {
+            btn.textContent = isFavorite ? '❤️' : '🤍';
+            btn.title = isFavorite ? '取消收藏' : '收藏';
+            btn.classList.toggle('favorite-active', isFavorite);
+            const card = btn.closest('.house-card');
+            if (card) {
+                card.classList.toggle('house-card-favorite', isFavorite);
+            }
+        }
+    });
+    
+    // 为房源列表中的参考房型按钮绑定事件（使用事件委托）
+    listContainer.querySelectorAll('.btn-reference').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const imagePath = btn.getAttribute('data-image');
+            if (imagePath) {
+                showRoomTypeImage(imagePath);
+            }
+        });
+    });
 }
 
 // 渲染分页
@@ -3064,7 +4085,7 @@ function getBuildingCorrection(buildingName) {
     return BUILDING_CORRECTION_MAP['其他'];
 }
 
-// 初始化期望值页面
+// 初始化选房偏好页面
 function initExpectationPage() {
     // 加载保存的权重
     // 映射：weights对象的key -> HTML元素的ID
@@ -3321,14 +4342,14 @@ function showSaveSuccessDialog() {
         existingToast.remove();
     }
     
-    // 创建toast元素
+    // 创建toast元素（居中且更大）
     const toast = document.createElement('div');
     toast.id = 'save-success-toast';
     toast.className = 'toast-message';
-    toast.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #fff; padding: 12px 20px; border-radius: 6px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); z-index: 5000; display: flex; align-items: center; opacity: 0; transform: translateX(100%); transition: all 0.3s ease; font-size: 14px; color: #333; border-left: 4px solid #52c41a;';
+    toast.style.cssText = 'position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; padding: 24px 40px; border-radius: 8px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2); z-index: 5000; display: flex; align-items: center; opacity: 0; transition: all 0.3s ease; font-size: 18px; color: #333; border-left: 4px solid #52c41a; min-width: 200px; text-align: center;';
     toast.innerHTML = `
-        <span style="color: #52c41a; margin-right: 8px; font-size: 16px;">✓</span>
-        <span>保存成功</span>
+        <span style="color: #52c41a; margin-right: 12px; font-size: 24px;">✓</span>
+        <span style="font-weight: 500;">保存成功</span>
     `;
     
     document.body.appendChild(toast);
@@ -3337,13 +4358,13 @@ function showSaveSuccessDialog() {
     toast.offsetHeight; // 触发重绘
     setTimeout(() => {
         toast.style.opacity = '1';
-        toast.style.transform = 'translateX(0)';
+        toast.style.transform = 'translate(-50%, -50%)';
     }, 10);
     
     // 3秒后自动消失
     setTimeout(() => {
         toast.style.opacity = '0';
-        toast.style.transform = 'translateX(100%)';
+        toast.style.transform = 'translate(-50%, -60%)';
         setTimeout(() => {
             if (toast.parentNode) {
                 toast.remove();
@@ -3872,7 +4893,7 @@ function loadWeights() {
             } else {
                 scoreFilter.disabled = true;
                 scoreFilter.classList.add('disabled');
-                scoreFilter.title = '请先设置期望值权重';
+                scoreFilter.title = '请先设置选房偏好权重';
             }
         }
     }, 100);
@@ -3882,6 +4903,20 @@ function loadWeights() {
 function formatPrice(price) {
     if (!price) return '-';
     return (price / 10000).toFixed(2) + '万';
+}
+
+// 格式化景观（最多显示两个，用逗号分隔，完整展示）
+function formatView(view) {
+    if (!view || view === null || view === undefined) return '-';
+    
+    // 如果包含逗号或中文逗号，说明是多个景观
+    if (view.includes('，') || view.includes(',')) {
+        const views = view.split(/[，,]/).map(v => v.trim()).filter(v => v);
+        // 最多显示两个，用中文逗号分隔
+        return views.slice(0, 2).join('，');
+    }
+    
+    return view;
 }
 
 // 检查并显示新手引导
@@ -3917,7 +4952,7 @@ function showNewUserGuide() {
     guideDiv.innerHTML = `
         <div class="guide-content">
             <h3>欢迎使用房源选择系统！</h3>
-            <p>为了使用分数排序功能，请先前往"期望值"页面设置您的偏好权重。</p>
+            <p>为了使用分数排序功能，请先前往"选房偏好"页面设置您的偏好权重。</p>
             <div class="guide-buttons">
                 <button class="btn-primary" id="guide-go-to-expectation">前往设置</button>
                 <button class="btn-secondary" id="guide-close">我知道了</button>
@@ -3952,6 +4987,12 @@ function closeGuide() {
 
 // 三期需求：显示房型图片浮窗
 function showRoomTypeImage(imagePath) {
+    // 记录查看参考房型埋点
+    trackEvent('view_reference', '查看参考房型', {
+        page: getCurrentPageName(),
+        imagePath: imagePath
+    });
+    
     // 移除已存在的浮窗
     const existingModal = document.getElementById('room-type-modal');
     if (existingModal) {
@@ -3965,6 +5006,9 @@ function showRoomTypeImage(imagePath) {
     modal.innerHTML = `
         <div class="room-type-modal-content">
             <span class="room-type-modal-close">&times;</span>
+            <div class="room-type-tip" style="padding: 8px 12px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; margin-top: 40px; margin-bottom: 12px; font-size: 12px; color: #856404; text-align: center;">
+                提示：该房型图仅为参考图，图片取自其他楼栋的同房型图
+            </div>
             <img src="${imagePath}" alt="房型图" class="room-type-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
             <div class="room-type-error" style="display: none; padding: 20px; text-align: center; color: #999;">
                 图片加载失败
@@ -3997,4 +5041,926 @@ function showRoomTypeImage(imagePath) {
     document.addEventListener('keydown', escHandler);
 }
 
+// ==================== 数据统计面板功能 ====================
+
+// 初始化统计面板（现在作为独立页面，不需要折叠功能）
+function initStatisticsPanel() {
+    // 统计面板现在是独立页面，不需要折叠功能
+    // 页面切换时会自动加载数据（在initTabs中处理）
+}
+
+// 加载统计数据
+async function loadStatistics() {
+    // 记录查看数据统计埋点
+    trackEvent('view_statistics', '查看数据统计', {
+        page: getCurrentPageName()
+    });
+    
+    const loadingEl = document.getElementById('statistics-loading');
+    const bodyEl = document.getElementById('statistics-body');
+    
+    if (loadingEl) loadingEl.style.display = 'block';
+    if (bodyEl) bodyEl.style.display = 'none';
+    
+    try {
+        // 获取所有房源数据
+        const response = await fetch(`${API_BASE}/houses/all`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const allHouses = await response.json();
+        
+        // 计算统计数据
+        const stats = calculateStatistics(allHouses);
+        
+        // 渲染统计数据（延迟一帧，确保DOM已完全渲染）
+        setTimeout(() => {
+            renderStatistics(stats);
+        }, 50);
+        
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (bodyEl) bodyEl.style.display = 'block';
+    } catch (error) {
+        console.error('加载统计数据失败:', error);
+        if (loadingEl) {
+            loadingEl.textContent = '加载失败，请重试';
+            loadingEl.style.display = 'block';
+        }
+    }
+}
+
+// 计算统计数据
+function calculateStatistics(houses) {
+    const stats = {
+        total: houses.length,
+        sold: 0,
+        unsold: 0,
+        priceDistribution: {}, // 价格分布：总房源数（包括已卖出）
+        priceDistributionUnsold: {}, // 价格分布：剩余房源数
+        roomTypeDistribution: {},
+        buildingStats: {}, // 楼栋统计：未售出数量
+        buildingStatsTotal: {} // 楼栋统计：总数量
+    };
+    
+    // 价格区间定义（万元）：250-410万，每10万一档
+    const priceRanges = [];
+    for (let price = 250; price < 410; price += 10) {
+        priceRanges.push({
+            min: price,
+            max: price + 10,
+            label: `${price}-${price + 10}万`
+        });
+    }
+    
+    // 初始化价格分布
+    priceRanges.forEach(range => {
+        stats.priceDistribution[range.label] = 0;
+        stats.priceDistributionUnsold[range.label] = 0;
+    });
+    
+    houses.forEach(house => {
+        // 售出情况统计
+        if (house.售出情况 === '已售出') {
+            stats.sold++;
+        } else {
+            stats.unsold++;
+        }
+        
+        // 价格分布统计（统计所有房源，包括已售出的）
+        if (house.价格) {
+            const priceInWan = house.价格 / 10000;
+            for (const range of priceRanges) {
+                if (priceInWan >= range.min && priceInWan < range.max) {
+                    stats.priceDistribution[range.label]++;
+                    // 如果未售出，也统计到剩余房源
+                    if (house.售出情况 !== '已售出') {
+                        stats.priceDistributionUnsold[range.label]++;
+                    }
+                    break;
+                }
+            }
+        }
+        
+        // 房型分布统计
+        const roomType = house.房子类型 || house.户型 || '其他';
+        stats.roomTypeDistribution[roomType] = (stats.roomTypeDistribution[roomType] || 0) + 1;
+        
+        // 楼栋统计
+        const building = house.楼栋名 || '未知';
+        // 统计总数
+        stats.buildingStatsTotal[building] = (stats.buildingStatsTotal[building] || 0) + 1;
+        // 统计未售出数量
+        if (house.售出情况 !== '已售出') {
+            stats.buildingStats[building] = (stats.buildingStats[building] || 0) + 1;
+        }
+    });
+    
+    return stats;
+}
+
+// 渲染统计数据
+function renderStatistics(stats) {
+    // 基础统计
+    document.getElementById('stat-total').textContent = stats.total;
+    document.getElementById('stat-sold').textContent = stats.sold;
+    document.getElementById('stat-unsold').textContent = stats.unsold;
+    
+    // 价格分布折线图
+    renderPriceLineChart(stats.priceDistribution, stats.priceDistributionUnsold);
+    
+    // 房型分布
+    renderRoomTypeStats(stats.roomTypeDistribution, stats.total);
+    
+    // 楼栋剩余房源柱状图
+    renderBuildingBarChart(stats.buildingStats, stats.buildingStatsTotal);
+}
+
+// 渲染价格分布折线图
+function renderPriceLineChart(priceDistribution, priceDistributionUnsold) {
+    const canvas = document.getElementById('price-line-chart');
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    const container = canvas.parentElement;
+    
+    // 设置canvas尺寸 - 使用容器实际宽度，确保横向铺满
+    // 如果容器宽度为0或未定义，使用默认值或等待下一帧
+    let containerWidth = container ? container.clientWidth : 800;
+    if (!containerWidth || containerWidth === 0) {
+        // 如果容器宽度为0，尝试使用offsetWidth或设置默认值
+        containerWidth = container ? (container.offsetWidth || 800) : 800;
+        // 如果还是0，延迟渲染
+        if (containerWidth === 0) {
+            setTimeout(() => renderPriceLineChart(priceDistribution, priceDistributionUnsold), 100);
+            return;
+        }
+    }
+    const containerHeight = 400;
+    
+    // 设置canvas的实际像素尺寸
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = containerWidth * dpr;
+    canvas.height = containerHeight * dpr;
+    canvas.style.width = containerWidth + 'px';
+    canvas.style.height = containerHeight + 'px';
+    
+    // 缩放上下文以适应高DPI屏幕
+    ctx.scale(dpr, dpr);
+    
+    // 获取排序后的价格区间
+    const sortedRanges = Object.keys(priceDistribution)
+        .sort((a, b) => {
+            const getMin = (label) => {
+                const match = label.match(/(\d+)/);
+                return match ? parseInt(match[1]) : 0;
+            };
+            return getMin(a) - getMin(b);
+        });
+    
+    if (sortedRanges.length === 0) {
+        ctx.fillStyle = '#999';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('暂无数据', containerWidth / 2, containerHeight / 2);
+        return;
+    }
+    
+    // 计算最大值
+    const maxTotal = Math.max(...Object.values(priceDistribution), 1);
+    const maxUnsold = Math.max(...Object.values(priceDistributionUnsold), 1);
+    const maxValue = Math.max(maxTotal, maxUnsold);
+    
+    // 图表区域
+    const padding = { top: 40, right: 40, bottom: 60, left: 60 };
+    const chartWidth = containerWidth - padding.left - padding.right;
+    const chartHeight = containerHeight - padding.top - padding.bottom;
+    
+    // 清空画布（使用逻辑尺寸）
+    ctx.clearRect(0, 0, containerWidth, containerHeight);
+    
+    // 绘制背景网格
+    ctx.strokeStyle = '#e8e8e8';
+    ctx.lineWidth = 1;
+    const gridLines = 5;
+    for (let i = 0; i <= gridLines; i++) {
+        const y = padding.top + (chartHeight / gridLines) * i;
+        ctx.beginPath();
+        ctx.moveTo(padding.left, y);
+        ctx.lineTo(padding.left + chartWidth, y);
+        ctx.stroke();
+        
+        // Y轴标签
+        const value = maxValue - (maxValue / gridLines) * i;
+        ctx.fillStyle = '#666';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'right';
+        ctx.fillText(Math.round(value).toString(), padding.left - 10, y + 4);
+    }
+    
+    // 计算X轴位置
+    const xStep = chartWidth / (sortedRanges.length - 1 || 1);
+    const points = sortedRanges.map((label, index) => ({
+        label,
+        x: padding.left + xStep * index,
+        total: priceDistribution[label] || 0,
+        unsold: priceDistributionUnsold[label] || 0
+    }));
+    
+    // 绘制总房源数折线（黄色）
+    ctx.strokeStyle = '#ffc107';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    points.forEach((point, index) => {
+        const y = padding.top + chartHeight - (point.total / maxValue) * chartHeight;
+        if (index === 0) {
+            ctx.moveTo(point.x, y);
+        } else {
+            ctx.lineTo(point.x, y);
+        }
+    });
+    ctx.stroke();
+    
+    // 绘制总房源数数据点
+    points.forEach(point => {
+        const y = padding.top + chartHeight - (point.total / maxValue) * chartHeight;
+        ctx.fillStyle = '#ffc107';
+        ctx.beginPath();
+        ctx.arc(point.x, y, 4, 0, Math.PI * 2);
+        ctx.fill();
+    });
+    
+    // 绘制剩余房源数折线（绿色）
+    ctx.strokeStyle = '#52c41a';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    points.forEach((point, index) => {
+        const y = padding.top + chartHeight - (point.unsold / maxValue) * chartHeight;
+        if (index === 0) {
+            ctx.moveTo(point.x, y);
+        } else {
+            ctx.lineTo(point.x, y);
+        }
+    });
+    ctx.stroke();
+    
+    // 绘制剩余房源数数据点
+    points.forEach(point => {
+        const y = padding.top + chartHeight - (point.unsold / maxValue) * chartHeight;
+        ctx.fillStyle = '#52c41a';
+        ctx.beginPath();
+        ctx.arc(point.x, y, 4, 0, Math.PI * 2);
+        ctx.fill();
+    });
+    
+    // 绘制X轴标签
+    ctx.fillStyle = '#333';
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'center';
+    points.forEach(point => {
+        ctx.save();
+        ctx.translate(point.x, padding.top + chartHeight + 20);
+        ctx.rotate(-Math.PI / 4);
+        ctx.fillText(point.label, 0, 0);
+        ctx.restore();
+    });
+    
+    // 绘制图例
+    const legendX = padding.left + chartWidth - 180;
+    const legendY = padding.top + 20;
+    ctx.fillStyle = '#ffc107';
+    ctx.fillRect(legendX, legendY, 15, 3);
+    ctx.fillStyle = '#333';
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('总房源数', legendX + 20, legendY + 10);
+    
+    ctx.fillStyle = '#52c41a';
+    ctx.fillRect(legendX, legendY + 20, 15, 3);
+    ctx.fillStyle = '#333';
+    ctx.fillText('剩余房源数', legendX + 20, legendY + 30);
+    
+    // 绘制Y轴标题
+    ctx.save();
+    ctx.translate(20, padding.top + chartHeight / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillStyle = '#666';
+    ctx.font = '14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('房源数量', 0, 0);
+    ctx.restore();
+    
+    // 保存points数据用于鼠标悬浮检测
+    canvas._priceChartData = {
+        points: points,
+        padding: padding,
+        chartHeight: chartHeight,
+        maxValue: maxValue,
+        containerWidth: containerWidth,
+        containerHeight: containerHeight,
+        dpr: dpr
+    };
+    
+    // 添加鼠标悬浮事件（只在第一次渲染时添加，避免重复添加）
+    if (!canvas._priceChartInitialized) {
+        let hoveredPoint = null;
+        let tooltipDiv = null;
+        
+        const handleMouseMove = (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const logicalX = (e.clientX - rect.left);
+            const logicalY = (e.clientY - rect.top);
+            
+            // 查找最近的数据点
+            let nearestPoint = null;
+            let minDistance = Infinity;
+            const hitRadius = 15; // 点击半径
+            
+            const chartData = canvas._priceChartData;
+            if (!chartData) return;
+            
+            const { points, padding, chartHeight, maxValue } = chartData;
+            
+            points.forEach(point => {
+                const totalY = padding.top + chartHeight - (point.total / maxValue) * chartHeight;
+                const unsoldY = padding.top + chartHeight - (point.unsold / maxValue) * chartHeight;
+                
+                // 检查是否接近总房源数点或剩余房源数点
+                const distToTotal = Math.sqrt(Math.pow(logicalX - point.x, 2) + Math.pow(logicalY - totalY, 2));
+                const distToUnsold = Math.sqrt(Math.pow(logicalX - point.x, 2) + Math.pow(logicalY - unsoldY, 2));
+                
+                if (distToTotal < hitRadius && distToTotal < minDistance) {
+                    minDistance = distToTotal;
+                    nearestPoint = { ...point, y: totalY, type: 'total' };
+                }
+                if (distToUnsold < hitRadius && distToUnsold < minDistance) {
+                    minDistance = distToUnsold;
+                    nearestPoint = { ...point, y: unsoldY, type: 'unsold' };
+                }
+            });
+            
+            // 如果找到最近的点，显示提示
+            if (nearestPoint) {
+                const pointChanged = !hoveredPoint || 
+                    hoveredPoint.x !== nearestPoint.x || 
+                    hoveredPoint.y !== nearestPoint.y ||
+                    hoveredPoint.type !== nearestPoint.type;
+                
+                if (pointChanged) {
+                    hoveredPoint = nearestPoint;
+                    
+                    // 重新绘制图表（清除之前的提示）
+                    renderPriceLineChart(priceDistribution, priceDistributionUnsold);
+                    
+                    // 等待渲染完成后绘制高亮点
+                    requestAnimationFrame(() => {
+                        const currentCtx = canvas.getContext('2d');
+                        const currentDpr = window.devicePixelRatio || 1;
+                        currentCtx.save();
+                        currentCtx.scale(currentDpr, currentDpr);
+                        
+                        // 绘制高亮点
+                        currentCtx.fillStyle = hoveredPoint.type === 'total' ? '#ffc107' : '#52c41a';
+                        currentCtx.beginPath();
+                        currentCtx.arc(hoveredPoint.x, hoveredPoint.y, 6, 0, Math.PI * 2);
+                        currentCtx.fill();
+                        currentCtx.strokeStyle = '#fff';
+                        currentCtx.lineWidth = 2;
+                        currentCtx.stroke();
+                        
+                        currentCtx.restore();
+                    });
+                    
+                    // 创建或更新提示框
+                    if (!tooltipDiv) {
+                        tooltipDiv = document.createElement('div');
+                        tooltipDiv.style.cssText = 'position: absolute; background: rgba(0, 0, 0, 0.8); color: white; padding: 8px 12px; border-radius: 4px; font-size: 12px; pointer-events: none; z-index: 1000; white-space: nowrap;';
+                        document.body.appendChild(tooltipDiv);
+                    }
+                    
+                    const tooltipText = hoveredPoint.type === 'total' 
+                        ? `${hoveredPoint.label}<br>总房源数: ${hoveredPoint.total}套`
+                        : `${hoveredPoint.label}<br>剩余房源数: ${hoveredPoint.unsold}套`;
+                    tooltipDiv.innerHTML = tooltipText;
+                    
+                    // 计算提示框位置
+                    const currentRect = canvas.getBoundingClientRect();
+                    const tooltipX = currentRect.left + hoveredPoint.x;
+                    const tooltipY = currentRect.top + hoveredPoint.y - 40;
+                    tooltipDiv.style.left = tooltipX + 'px';
+                    tooltipDiv.style.top = tooltipY + 'px';
+                    tooltipDiv.style.display = 'block';
+                }
+            } else if (!nearestPoint && hoveredPoint) {
+                // 鼠标移开，清除提示
+                hoveredPoint = null;
+                if (tooltipDiv) {
+                    tooltipDiv.style.display = 'none';
+                }
+                // 重新绘制图表
+                renderPriceLineChart(priceDistribution, priceDistributionUnsold);
+            }
+        };
+        
+        const handleMouseLeave = () => {
+            hoveredPoint = null;
+            if (tooltipDiv) {
+                tooltipDiv.style.display = 'none';
+            }
+            // 重新绘制图表
+            renderPriceLineChart(priceDistribution, priceDistributionUnsold);
+        };
+        
+        canvas._handleMouseMove = handleMouseMove;
+        canvas._handleMouseLeave = handleMouseLeave;
+        canvas.addEventListener('mousemove', handleMouseMove);
+        canvas.addEventListener('mouseleave', handleMouseLeave);
+        canvas._priceChartInitialized = true;
+    }
+}
+
+// 渲染房型分布
+function renderRoomTypeStats(roomTypeDistribution, total) {
+    const container = document.getElementById('room-type-stats');
+    if (!container) return;
+    
+    const sorted = Object.entries(roomTypeDistribution)
+        .sort((a, b) => b[1] - a[1]);
+    
+    let html = '';
+    sorted.forEach(([roomType, count]) => {
+        const percentage = total > 0 ? ((count / total) * 100).toFixed(1) : 0;
+        html += `
+            <div class="room-type-item">
+                <div class="room-type-item-header">
+                    <span class="room-type-name">${roomType || '其他'}</span>
+                    <span class="room-type-count">${count}套</span>
+                </div>
+                <div class="room-type-percent">占比: ${percentage}%</div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html || '<div style="text-align: center; color: #999; padding: 20px;">暂无数据</div>';
+}
+
+// 渲染楼栋剩余房源柱状图
+function renderBuildingBarChart(buildingStats, buildingStatsTotal) {
+    const canvas = document.getElementById('building-bar-chart');
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    const container = canvas.parentElement;
+    
+    // 设置canvas尺寸 - 使用容器实际宽度，确保横向铺满
+    // 如果容器宽度为0或未定义，使用默认值或等待下一帧
+    let containerWidth = container ? container.clientWidth : 800;
+    if (!containerWidth || containerWidth === 0) {
+        // 如果容器宽度为0，尝试使用offsetWidth或设置默认值
+        containerWidth = container ? (container.offsetWidth || 800) : 800;
+        // 如果还是0，延迟渲染
+        if (containerWidth === 0) {
+            setTimeout(() => renderPriceLineChart(priceDistribution, priceDistributionUnsold), 100);
+            return;
+        }
+    }
+    const containerHeight = 400;
+    
+    // 设置canvas的实际像素尺寸
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = containerWidth * dpr;
+    canvas.height = containerHeight * dpr;
+    canvas.style.width = containerWidth + 'px';
+    canvas.style.height = containerHeight + 'px';
+    
+    // 缩放上下文以适应高DPI屏幕
+    ctx.scale(dpr, dpr);
+    
+    // 获取所有楼栋并排序
+    const allBuildings = Object.keys(buildingStatsTotal);
+    const sortedBuildings = allBuildings.sort((a, b) => {
+        // 按楼栋名称排序（1A, 1B, 1C...）
+        const matchA = a.match(/(\d+)([A-Z])/);
+        const matchB = b.match(/(\d+)([A-Z])/);
+        if (matchA && matchB) {
+            const numA = parseInt(matchA[1]);
+            const numB = parseInt(matchB[1]);
+            if (numA !== numB) return numA - numB;
+            return matchA[2].localeCompare(matchB[2]);
+        }
+        return a.localeCompare(b);
+    });
+    
+    if (sortedBuildings.length === 0) {
+        ctx.fillStyle = '#999';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('暂无数据', containerWidth / 2, containerHeight / 2);
+        return;
+    }
+    
+    // 计算最大值
+    const maxTotal = Math.max(...Object.values(buildingStatsTotal), 1);
+    const maxUnsold = Math.max(...Object.values(buildingStats), 1);
+    const maxValue = Math.max(maxTotal, maxUnsold);
+    
+    // 图表区域
+    const padding = { top: 40, right: 40, bottom: 60, left: 60 };
+    const chartWidth = containerWidth - padding.left - padding.right;
+    const chartHeight = containerHeight - padding.top - padding.bottom;
+    
+    // 清空画布（使用逻辑尺寸）
+    ctx.clearRect(0, 0, containerWidth, containerHeight);
+    
+    // 绘制背景网格
+    ctx.strokeStyle = '#e8e8e8';
+    ctx.lineWidth = 1;
+    const gridLines = 5;
+    for (let i = 0; i <= gridLines; i++) {
+        const y = padding.top + (chartHeight / gridLines) * i;
+        ctx.beginPath();
+        ctx.moveTo(padding.left, y);
+        ctx.lineTo(padding.left + chartWidth, y);
+        ctx.stroke();
+        
+        // Y轴标签
+        const value = maxValue - (maxValue / gridLines) * i;
+        ctx.fillStyle = '#666';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'right';
+        ctx.fillText(Math.round(value).toString(), padding.left - 10, y + 4);
+    }
+    
+    // 计算柱状图参数
+    const barWidth = chartWidth / sortedBuildings.length * 0.6;
+    const barSpacing = chartWidth / sortedBuildings.length;
+    const barX = (index) => padding.left + barSpacing * index + (barSpacing - barWidth) / 2;
+    
+    // 绘制柱状图
+    sortedBuildings.forEach((building, index) => {
+        const total = buildingStatsTotal[building] || 0;
+        const unsold = buildingStats[building] || 0;
+        
+        const x = barX(index);
+        
+        // 绘制总房源数柱（黄色）
+        const totalHeight = (total / maxValue) * chartHeight;
+        ctx.fillStyle = '#ffc107';
+        ctx.fillRect(x, padding.top + chartHeight - totalHeight, barWidth / 2, totalHeight);
+        
+        // 绘制剩余房源数柱（绿色）
+        const unsoldHeight = (unsold / maxValue) * chartHeight;
+        ctx.fillStyle = '#52c41a';
+        ctx.fillRect(x + barWidth / 2, padding.top + chartHeight - unsoldHeight, barWidth / 2, unsoldHeight);
+        
+        // 绘制数值标签（确保标签在柱子顶部上方，不重叠）
+        if (total > 0) {
+            const labelY = padding.top + chartHeight - totalHeight - 8;
+            // 只有当标签位置在图表区域内时才绘制
+            if (labelY >= padding.top) {
+                ctx.fillStyle = '#333';
+                ctx.font = '11px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(total.toString(), x + barWidth / 4, labelY);
+            }
+        }
+        if (unsold > 0) {
+            const labelY = padding.top + chartHeight - unsoldHeight - 8;
+            // 只有当标签位置在图表区域内时才绘制
+            if (labelY >= padding.top) {
+                ctx.fillStyle = '#333';
+                ctx.font = '11px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(unsold.toString(), x + barWidth * 3 / 4, labelY);
+            }
+        }
+        
+        // 绘制X轴标签
+        ctx.fillStyle = '#333';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(building, x + barWidth / 2, padding.top + chartHeight + 20);
+    });
+    
+    // 绘制图例（移到右上角，避免与柱状图重叠，并添加背景）
+    const legendX = padding.left + chartWidth - 150;
+    const legendY = padding.top + 5;
+    
+    // 绘制图例背景（半透明白色，避免与图表重叠）
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.fillRect(legendX - 5, legendY - 5, 140, 50);
+    ctx.strokeStyle = '#e8e8e8';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(legendX - 5, legendY - 5, 140, 50);
+    
+    // 总房源数图例
+    ctx.fillStyle = '#ffc107';
+    ctx.fillRect(legendX, legendY, 15, 12);
+    ctx.fillStyle = '#333';
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('总房源数', legendX + 20, legendY + 10);
+    
+    // 未售出图例
+    ctx.fillStyle = '#52c41a';
+    ctx.fillRect(legendX, legendY + 20, 15, 12);
+    ctx.fillStyle = '#333';
+    ctx.fillText('未售出', legendX + 20, legendY + 30);
+    
+    // 绘制Y轴标题
+    ctx.save();
+    ctx.translate(20, padding.top + chartHeight / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillStyle = '#666';
+    ctx.font = '14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('房源数量', 0, 0);
+    ctx.restore();
+}
+
+// ==================== 筛选器快捷预设功能 ====================
+
+// 初始化筛选器快捷预设
+function initFilterPresets() {
+    const presetUnsold = document.getElementById('preset-unsold');
+    const presetThreeRoom = document.getElementById('preset-three-room');
+    const presetTwoRoom = document.getElementById('preset-two-room');
+    const presetReset = document.getElementById('preset-reset');
+    
+    if (!presetUnsold || !presetThreeRoom || !presetTwoRoom || !presetReset) {
+        console.warn('筛选器快捷预设按钮未找到，跳过初始化');
+        return;
+    }
+    
+    // 只看未售出
+    presetUnsold.addEventListener('click', () => {
+        trackEvent('preset_click', '只看未售出', {
+            page: getCurrentPageName()
+        });
+        const soldStatusSelect = document.getElementById('filter-sold-status');
+        if (soldStatusSelect) {
+            soldStatusSelect.value = '未售出';
+            document.getElementById('btn-search')?.click();
+        }
+    });
+    
+    // 只看三房
+    presetThreeRoom.addEventListener('click', () => {
+        trackEvent('preset_click', '只看三房', {
+            page: getCurrentPageName()
+        });
+        // 三房通常是90平米
+        const areaSelect = document.getElementById('filter-area');
+        if (areaSelect) {
+            areaSelect.value = '90';
+            document.getElementById('btn-search')?.click();
+        }
+    });
+    
+    // 只看两房
+    presetTwoRoom.addEventListener('click', () => {
+        trackEvent('preset_click', '只看两房', {
+            page: getCurrentPageName()
+        });
+        // 两房通常是70平米
+        const areaSelect = document.getElementById('filter-area');
+        if (areaSelect) {
+            areaSelect.value = '70';
+            document.getElementById('btn-search')?.click();
+        }
+    });
+    
+    // 重置筛选
+    presetReset.addEventListener('click', () => {
+        trackEvent('preset_click', '重置筛选', {
+            page: getCurrentPageName()
+        });
+        // 重置所有筛选条件
+        const elements = {
+            'filter-building': '',
+            'filter-room-type': '',
+            'filter-area': '',
+            'filter-price-min': '',
+            'filter-price-max': '',
+            'filter-floor-min': '',
+            'filter-floor-max': '',
+            'filter-sold-status': '',
+            'filter-favorite': '',
+            'filter-sort': ''
+        };
+        
+        Object.entries(elements).forEach(([id, value]) => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.value = value;
+            }
+        });
+        
+        // 重置收藏开关
+        const favoriteToggle = document.getElementById('filter-favorite-toggle');
+        if (favoriteToggle) {
+            favoriteToggle.checked = false;
+        }
+        
+        // 重置多选朝向
+        const orientationData = customMultiselectData['filter-orientation'];
+        if (orientationData) {
+            orientationData.selected = [];
+            if (typeof updateCustomMultiselectDisplay === 'function') {
+                updateCustomMultiselectDisplay('filter-orientation');
+            }
+        }
+        
+        // 触发搜索
+        document.getElementById('btn-search')?.click();
+    });
+}
+
+// ==================== 导出Excel功能 ====================
+
+// 初始化导出按钮
+function initExportButton() {
+    const exportBtn = document.getElementById('btn-export');
+    if (!exportBtn) {
+        console.warn('导出按钮未找到，跳过初始化');
+        return;
+    }
+    
+    exportBtn.addEventListener('click', async () => {
+        // 记录导出埋点
+        trackEvent('button_click', '导出Excel', {
+            page: getCurrentPageName()
+        });
+        await exportToExcel();
+    });
+}
+
+// 导出当前筛选结果到Excel
+async function exportToExcel() {
+    try {
+        // 检查SheetJS库是否加载
+        if (typeof XLSX === 'undefined') {
+            showToast('Excel导出库未加载，请刷新页面重试', 'error');
+            return;
+        }
+        
+        showToast('正在导出，请稍候...', 'info');
+        
+        // 获取当前筛选条件
+        const rawRoomType = document.getElementById('filter-room-type')?.value || '';
+        let roomTypeParam = '';
+        if (rawRoomType) {
+            if (ROOM_TYPE_GROUPS && ROOM_TYPE_GROUPS[rawRoomType]) {
+                roomTypeParam = ROOM_TYPE_GROUPS[rawRoomType].join(',');
+            } else {
+                roomTypeParam = rawRoomType;
+            }
+        }
+        
+        const filterBuilding = document.getElementById('filter-building');
+        const filterArea = document.getElementById('filter-area');
+        const filterFloorMin = document.getElementById('filter-floor-min');
+        const filterFloorMax = document.getElementById('filter-floor-max');
+        const filterSoldStatus = document.getElementById('filter-sold-status');
+        const filterPriceMin = document.getElementById('filter-price-min');
+        const filterPriceMax = document.getElementById('filter-price-max');
+        
+        const filters = {
+            '楼栋': filterBuilding?.value || '',
+            '房型': roomTypeParam,
+            '房子面积': filterArea?.value || '',
+            '房子朝向': typeof getCustomMultiselectValues === 'function' 
+                ? getCustomMultiselectValues('filter-orientation').join(',') : '',
+            '楼层最低': filterFloorMin?.value || '',
+            '楼层最高': filterFloorMax?.value || '',
+            '售出情况': filterSoldStatus?.value || '',
+            '价格最低': filterPriceMin?.value ? 
+                (parseFloat(filterPriceMin.value) * 10000).toString() : '',
+            '价格最高': filterPriceMax?.value ? 
+                (parseFloat(filterPriceMax.value) * 10000).toString() : '',
+        };
+        
+        // 构建查询参数
+        const params = new URLSearchParams();
+        Object.keys(filters).forEach(key => {
+            if (filters[key]) {
+                params.append(key, filters[key]);
+            }
+        });
+        
+        // 获取所有筛选后的房源（不分页）
+        const response = await fetch(`${API_BASE}/houses/all?${params.toString()}`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        let allHouses = await response.json();
+        
+        // 如果选择了收藏筛选，需要前端过滤
+        const favoriteFilter = document.getElementById('filter-favorite')?.value;
+        if (favoriteFilter === 'favorite') {
+            const favorites = typeof getFavoriteHouses === 'function' ? getFavoriteHouses() : [];
+            allHouses = allHouses.filter(house => {
+                const houseKey = `${house.楼栋名}_${house.房号}`;
+                return favorites.includes(houseKey);
+            });
+        }
+        
+        // 检查是否有数据
+        if (!allHouses || allHouses.length === 0) {
+            showToast('没有可导出的数据', 'warning');
+            return;
+        }
+        
+        // 记录导出操作埋点（包含导出数量）
+        trackEvent('export', '导出Excel', {
+            page: getCurrentPageName(),
+            exportCount: allHouses.length,
+            filters: filters
+        });
+        
+        // 如果有分数，添加到数据中
+        allHouses.forEach(house => {
+            if (house.id) {
+                if (allHousesDisplayScores && allHousesDisplayScores[house.id] !== undefined) {
+                    house.score = allHousesDisplayScores[house.id];
+                } else if (allHousesScoresCache && allHousesScoresCache[house.id] !== undefined) {
+                    house.score = allHousesScoresCache[house.id];
+                }
+            }
+        });
+        
+        // 准备Excel数据
+        const excelData = allHouses.map(house => {
+            // 确保价格是数字类型
+            const price = house.价格;
+            let priceNum = 0;
+            let priceWan = '';
+            
+            if (price !== null && price !== undefined && price !== '') {
+                priceNum = typeof price === 'string' ? parseFloat(price) : price;
+                if (!isNaN(priceNum) && priceNum > 0) {
+                    priceWan = (priceNum / 10000).toFixed(2);
+                }
+            }
+            
+            return {
+                '楼栋': house.楼栋名 || '',
+                '房号': house.房号 || '',
+                '房型': house.房子类型 || house.户型 || '',
+                '面积': house.房子面积 || '',
+                '价格（元）': priceNum > 0 ? priceNum : '',
+                '价格（万元）': priceWan || '',
+                '楼层': house.房子楼层 || '',
+                '朝向': house.朝向 || '',
+                '噪音': house.噪音 || '',
+                '景观': house.景观 || '',
+                '售出情况': house.售出情况 || '',
+                '综合分数': house.score !== undefined && house.score !== null && !isNaN(house.score) 
+                    ? parseFloat(house.score).toFixed(2) : ''
+            };
+        });
+        
+        // 创建Excel工作簿
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.json_to_sheet(excelData);
+        
+        // 设置列宽
+        const colWidths = [
+            { wch: 12 }, // 楼栋
+            { wch: 8 },  // 房号
+            { wch: 10 }, // 房型
+            { wch: 8 },  // 面积
+            { wch: 12 }, // 价格（元）
+            { wch: 12 }, // 价格（万元）
+            { wch: 8 },  // 楼层
+            { wch: 10 }, // 朝向
+            { wch: 8 },  // 噪音
+            { wch: 10 }, // 景观
+            { wch: 12 }, // 售出情况
+            { wch: 12 }  // 综合分数
+        ];
+        ws['!cols'] = colWidths;
+        
+        // 添加工作表到工作簿
+        XLSX.utils.book_append_sheet(wb, ws, '房源列表');
+        
+        // 生成文件名（包含时间戳）
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hour = String(now.getHours()).padStart(2, '0');
+        const minute = String(now.getMinutes()).padStart(2, '0');
+        const second = String(now.getSeconds()).padStart(2, '0');
+        const filename = `房源列表_${year}${month}${day}_${hour}${minute}${second}.xlsx`;
+        
+        // 导出文件
+        XLSX.writeFile(wb, filename);
+        
+        showToast(`导出成功！共导出 ${allHouses.length} 条数据`, 'success');
+    } catch (error) {
+        console.error('导出失败:', error);
+        showToast('导出失败：' + (error.message || '未知错误'), 'error');
+    }
+}
 
