@@ -1,5 +1,6 @@
 # 数据库文件
 *.db
+!house_data.db
 *.sqlite
 *.sqlite3
 
